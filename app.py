@@ -43,7 +43,8 @@ MAX_TOKENS = 4096
 @st.cache_resource
 def get_client():
     """Initialize Anthropic client (cached across reruns)."""
-    return anthropic.Anthropic()
+    api_key = st.secrets.get("ANTHROPIC_API_KEY", None)
+    return anthropic.Anthropic(api_key=api_key)
 
 
 def extract_from_pdf(pdf_bytes: bytes) -> dict:
