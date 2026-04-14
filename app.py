@@ -20,6 +20,7 @@ from io import BytesIO
 
 # ── Import the extraction prompt ──────────────────────
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
+from summary_generator import generate_text_summary, generate_html_summary
 
 
 # ══════════════════════════════════════════════════════
@@ -319,28 +320,61 @@ with tab_json:
 st.divider()
 st.subheader("Export")
 
-col1, col2 = st.columns(2)
+fname = st.session_state.get("filename", "output")
+
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
+    # Text summary — best for pasting into TPS notes
+    text_summary = generate_text_summary(data, fname)
+    st.download_button(
+        "📋 Summary (Text)",
+        data=text_summary.encode("utf-8"),
+        file_name=f"summary_{fname}.txt",
+        mime="text/plain",
+        use_container_width=True,
+        help="Plain text — paste directly into TPS notes",
+    )
+
+with col2:
+    # HTML summary — formatted, printable
+    html_summary = generate_html_summary(data, fname)
+    st.download_button(
+        "🌐 Summary (HTML)",
+        data=html_summary.encode("utf-8"),
+        file_name=f"summary_{fname}.html",
+        mime="text/html",
+        use_container_width=True,
+        help="Formatted summary — open in browser or print",
+    )
+
+with col3:
     # CSV export (flattened single row)
     flat = flatten_for_csv(data)
     df = pd.DataFrame([flat])
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "📥 Download CSV",
+        "📥 Data (CSV)",
         data=csv_bytes,
-        file_name=f"extraction_{st.session_state.get('filename', 'output')}.csv",
+        file_name=f"extraction_{fname}.csv",
         mime="text/csv",
         use_container_width=True,
+        help="Flat CSV — one row, all fields as columns",
     )
 
-with col2:
+with col4:
     # JSON export (full nested)
     json_bytes = json.dumps(data, indent=2).encode("utf-8")
     st.download_button(
-        "📥 Download JSON",
+        "📥 Data (JSON)",
         data=json_bytes,
-        file_name=f"extraction_{st.session_state.get('filename', 'output')}.json",
+        file_name=f"extraction_{fname}.json",
         mime="application/json",
         use_container_width=True,
+        help="Full structured data — for integrations",
     )
+
+# Preview the text summary inline for quick copy-paste
+with st.expander("📋 Preview Text Summary (click to copy)"):
+    st.code(text_summary, language=None)
+
