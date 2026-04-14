@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MN_Purchase_Agreement_Extraction",
+  "description": "Structured extraction schema for Minnesota residential real estate purchase agreements",
+  "type": "object",
+  "properties": {
+    "parties": {
+      "type": "object",
+      "properties": {
+        "buyers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "entity_type": {
+                "type": "string",
+                "enum": ["individual", "trust", "llc", "corporation", "partnership", "other"]
+              },
+              "entity_name": { "type": ["string", "null"], "description": "If entity_type is not individual, the formal entity name" }
+            },
+            "required": ["name", "entity_type"]
+          }
+        },
+        "sellers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "entity_type": {
+                "type": "string",
+                "enum": ["individual", "trust", "llc", "corporation", "partnership", "other"]
+              },
+              "entity_name": { "type": ["string", "null"] }
+            },
+            "required": ["name", "entity_type"]
+          }
+        }
+      },
+      "required": ["buyers", "sellers"]
+    },
+    "property": {
+      "type": "object",
+      "properties": {
+        "street_address": { "type": "string" },
+        "city": { "type": "string" },
+        "county": { "type": "string" },
+        "state": { "type": "string", "default": "Minnesota" },
+        "zip_code": { "type": "string" },
+        "legal_description": { "type": "string" },
+        "pid": { "type": ["string", "null"], "description": "Property ID / parcel number if present" }
+      },
+      "required": ["street_address", "city", "county", "zip_code", "legal_description"]
+    },
+    "financial": {
+      "type": "object",
+      "properties": {
+        "purchase_price": { "type": "number" },
+        "earnest_money_amount": { "type": "number" },
+        "earnest_money_holder": { "type": ["string", "null"] },
+        "financing_type": {
+          "type": "string",
+          "enum": ["conventional", "fha", "va", "usda", "cash", "contract_for_deed", "assumption", "other"]
+        },
+        "financing_type_other": { "type": ["string", "null"], "description": "If financing_type is other, describe" },
+        "down_payment_amount": { "type": ["number", "null"] },
+        "seller_concessions": { "type": ["number", "null"] }
+      },
+      "required": ["purchase_price", "earnest_money_amount", "financing_type"]
+    },
+    "dates": {
+      "type": "object",
+      "properties": {
+        "acceptance_deadline": { "type": ["string", "null"], "format": "date" },
+        "closing_date": { "type": ["string", "null"], "format": "date" },
+        "possession_date": { "type": ["string", "null"], "format": "date" },
+        "title_commitment_deadline": { "type": ["string", "null"], "format": "date" },
+        "inspection_deadline": { "type": ["string", "null"], "format": "date" },
+        "financing_contingency_deadline": { "type": ["string", "null"], "format": "date" },
+        "appraisal_contingency_deadline": { "type": ["string", "null"], "format": "date" },
+        "buyer_signature_date": { "type": ["string", "null"], "format": "date" },
+        "seller_signature_date": { "type": ["string", "null"], "format": "date" }
+      },
+      "required": ["closing_date"]
+    },
+    "title_and_closing": {
+      "type": "object",
+      "properties": {
+        "title_company": { "type": ["string", "null"] },
+        "closing_agent": { "type": ["string", "null"] },
+        "listing_agent_name": { "type": ["string", "null"] },
+        "listing_brokerage": { "type": ["string", "null"] },
+        "selling_agent_name": { "type": ["string", "null"] },
+        "selling_brokerage": { "type": ["string", "null"] }
+      }
+    },
+    "contingencies": {
+      "type": "object",
+      "properties": {
+        "financing_contingency": { "type": "boolean" },
+        "inspection_contingency": { "type": "boolean" },
+        "appraisal_contingency": { "type": "boolean" },
+        "sale_of_buyers_property": { "type": "boolean" },
+        "other_contingencies": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["financing_contingency", "inspection_contingency", "appraisal_contingency", "sale_of_buyers_property"]
+    },
+    "mn_specific_disclosures": {
+      "type": "object",
+      "properties": {
+        "well_disclosure_present": { "type": "boolean" },
+        "well_number": { "type": ["string", "null"] },
+        "septic_disclosure_present": { "type": "boolean" },
+        "septic_system_type": { "type": ["string", "null"] },
+        "hoa_present": { "type": "boolean" },
+        "hoa_name": { "type": ["string", "null"] },
+        "hoa_dues_amount": { "type": ["number", "null"] },
+        "hoa_dues_frequency": { "type": ["string", "null"], "enum": ["monthly", "quarterly", "annually", null] }
+      },
+      "required": ["well_disclosure_present", "septic_disclosure_present", "hoa_present"]
+    },
+    "addenda": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "addendum_title": { "type": "string" },
+          "addendum_date": { "type": ["string", "null"], "format": "date" },
+          "summary": { "type": "string" }
+        },
+        "required": ["addendum_title"]
+      }
+    },
+    "extraction_metadata": {
+      "type": "object",
+      "properties": {
+        "total_pages": { "type": ["integer", "null"] },
+        "form_type": { "type": ["string", "null"], "description": "e.g., MSBA/MNAR standard form, custom, etc." },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string" },
+              "issue": { "type": "string", "enum": ["missing", "ambiguous", "illegible", "conflicting"] },
+              "note": { "type": "string" }
+            },
+            "required": ["field", "issue", "note"]
+          }
+        }
+      }
+    }
+  },
+  "required": ["parties", "property", "financial", "dates", "contingencies", "mn_specific_disclosures", "extraction_metadata"]
+}
