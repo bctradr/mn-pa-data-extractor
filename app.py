@@ -33,7 +33,7 @@ st.set_page_config(
     layout="wide",
 )
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 
 
