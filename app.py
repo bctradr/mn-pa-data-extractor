@@ -6,7 +6,6 @@ real estate purchase agreements using the Claude API.
 
 Setup:
     pip install streamlit anthropic pandas
-    export ANTHROPIC_API_KEY=sk-ant-...
     streamlit run app.py
 """
 
@@ -84,6 +83,40 @@ def extract_from_pdf(pdf_bytes: bytes) -> dict:
     return json.loads(raw_text)
 
 
+def get_line_ref(data: dict, field_name: str) -> str:
+    """Get the PA line number reference for a field, formatted for display."""
+    source_lines = data.get("extraction_metadata", {}).get("source_lines", {})
+    line = source_lines.get(field_name)
+    if line:
+        # If it's just a number, prefix with "Line"
+        if str(line).isdigit():
+            return f"Line {line}"
+        return str(line)
+    return ""
+
+
+def format_currency(value) -> str:
+    """Format a number as currency string for text_input display."""
+    if value is None or value == 0:
+        return ""
+    try:
+        return f"{float(value):,.2f}"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def parse_currency(text: str) -> float:
+    """Parse a currency string back to a float."""
+    if not text or text.strip() == "":
+        return 0.0
+    # Remove $, commas, spaces
+    cleaned = text.replace("$", "").replace(",", "").strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
 def flatten_for_csv(data: dict) -> dict:
     """Flatten nested extraction JSON into a single-row dict for CSV export."""
     flat = {}
@@ -99,13 +132,15 @@ def flatten_for_csv(data: dict) -> dict:
 
     # Property
     prop = data.get("property", {})
-    for key in ["street_address", "city", "county", "state", "zip_code", "legal_description", "pid"]:
+    for key in ["street_address", "unit_no", "city", "county", "state", "zip_code", "legal_description", "pid"]:
         flat[key] = prop.get(key)
 
     # Financial
     fin = data.get("financial", {})
     for key in ["purchase_price", "earnest_money_amount", "earnest_money_holder",
-                "financing_type", "down_payment_amount", "seller_concessions"]:
+                "financing_type", "down_payment_amount", "seller_concessions",
+                "cash_pct", "cash_amount", "mortgage_pct", "mortgage_amount",
+                "assumption_pct", "assumption_amount", "contract_for_deed_pct", "contract_for_deed_amount"]:
         flat[key] = fin.get(key)
 
     # Dates
@@ -164,7 +199,7 @@ with st.sidebar:
         st.caption(f"{uploaded_file.size / 1024:.0f} KB")
 
     st.divider()
-    st.caption("v0.1 — Uses Claude API for extraction")
+    st.caption("v0.2 — Uses Claude API for extraction")
 
 # ── Main area ─────────────────────────────────────────
 if uploaded_file is None:
@@ -195,13 +230,20 @@ data = st.session_state["extraction"]
 flags = data.get("extraction_metadata", {}).get("flags", [])
 
 def get_flags_for(field_prefix: str) -> list:
-    """Return flags matching a field prefix (e.g., 'parties', 'financial.purchase_price')."""
+    """Return flags matching a field prefix."""
     return [f for f in flags if f.get("field", "").startswith(field_prefix)]
 
 def show_flags(field_prefix: str):
     """Display any flags for a field as small warnings below it."""
     for f in get_flags_for(field_prefix):
         st.caption(f"⚠️ _{f.get('issue', '?')}_ — {f.get('note', '')}")
+
+def line_label(field_name: str) -> str:
+    """Return a line reference string for display next to a field label."""
+    ref = get_line_ref(data, field_name)
+    if ref:
+        return f" ({ref})"
+    return ""
 
 # ── Summary flag count at top ─────────────────────────
 if flags:
@@ -217,7 +259,10 @@ with tab_parties:
     st.subheader("Buyers")
     for i, buyer in enumerate(data.get("parties", {}).get("buyers", [])):
         col1, col2 = st.columns(2)
-        buyer["name"] = col1.text_input(f"Buyer {i+1} Name", value=buyer.get("name", ""), key=f"buyer_name_{i}")
+        buyer["name"] = col1.text_input(
+            f"Buyer {i+1} Name{line_label('buyers')}", 
+            value=buyer.get("name", ""), key=f"buyer_name_{i}"
+        )
         buyer["entity_type"] = col2.selectbox(
             f"Buyer {i+1} Entity Type", 
             ["individual", "trust", "llc", "corporation", "partnership", "other"],
@@ -229,7 +274,10 @@ with tab_parties:
     st.subheader("Sellers")
     for i, seller in enumerate(data.get("parties", {}).get("sellers", [])):
         col1, col2 = st.columns(2)
-        seller["name"] = col1.text_input(f"Seller {i+1} Name", value=seller.get("name", ""), key=f"seller_name_{i}")
+        seller["name"] = col1.text_input(
+            f"Seller {i+1} Name{line_label('sellers')}", 
+            value=seller.get("name", ""), key=f"seller_name_{i}"
+        )
         seller["entity_type"] = col2.selectbox(
             f"Seller {i+1} Entity Type",
             ["individual", "trust", "llc", "corporation", "partnership", "other"],
@@ -240,55 +288,167 @@ with tab_parties:
 
 with tab_property:
     prop = data.get("property", {})
-    col1, col2 = st.columns(2)
-    prop["street_address"] = col1.text_input("Street Address", value=prop.get("street_address", ""))
-    prop["city"] = col2.text_input("City", value=prop.get("city", ""))
+    col1, col2, col3 = st.columns([3, 1, 2])
+    prop["street_address"] = col1.text_input(
+        f"Street Address{line_label('street_address')}", 
+        value=prop.get("street_address", "")
+    )
+    prop["unit_no"] = col2.text_input(
+        f"Unit No.{line_label('unit_no')}", 
+        value=prop.get("unit_no", "") or ""
+    )
+    prop["city"] = col3.text_input(
+        f"City{line_label('city')}", 
+        value=prop.get("city", "")
+    )
     show_flags("property.street_address")
     show_flags("property.city")
     col1, col2, col3 = st.columns(3)
-    prop["county"] = col1.text_input("County", value=prop.get("county", ""))
-    prop["zip_code"] = col2.text_input("Zip Code", value=prop.get("zip_code", ""))
-    prop["pid"] = col3.text_input("PID / Parcel #", value=prop.get("pid", "") or "")
+    prop["county"] = col1.text_input(
+        f"County{line_label('county')}", 
+        value=prop.get("county", "")
+    )
+    prop["zip_code"] = col2.text_input(
+        f"Zip Code{line_label('zip_code')}", 
+        value=prop.get("zip_code", "")
+    )
+    prop["pid"] = col3.text_input(
+        f"PID / Parcel #{line_label('pid')}", 
+        value=prop.get("pid", "") or ""
+    )
     show_flags("property.county")
     show_flags("property.pid")
-    prop["legal_description"] = st.text_area("Legal Description", value=prop.get("legal_description", ""), height=100)
+    prop["legal_description"] = st.text_area(
+        f"Legal Description from PA{line_label('legal_description')}", 
+        value=prop.get("legal_description", ""), height=100
+    )
     show_flags("property.legal_description")
 
 with tab_financial:
     fin = data.get("financial", {})
+    
+    # Purchase price, earnest money, seller concessions — text inputs (no +/- spinners)
     col1, col2, col3 = st.columns(3)
-    fin["purchase_price"] = col1.number_input("Purchase Price", value=float(fin.get("purchase_price", 0)))
-    fin["earnest_money_amount"] = col2.number_input("Earnest Money", value=float(fin.get("earnest_money_amount", 0)))
-    fin["seller_concessions"] = col3.number_input("Seller Concessions", value=float(fin.get("seller_concessions", 0) or 0))
+    price_str = col1.text_input(
+        f"Purchase Price{line_label('purchase_price')}", 
+        value=format_currency(fin.get("purchase_price", 0))
+    )
+    fin["purchase_price"] = parse_currency(price_str)
+    
+    em_str = col2.text_input(
+        f"Earnest Money{line_label('earnest_money_amount')}", 
+        value=format_currency(fin.get("earnest_money_amount", 0))
+    )
+    fin["earnest_money_amount"] = parse_currency(em_str)
+    
+    sc_str = col3.text_input(
+        f"Seller Concessions{line_label('seller_concessions')}", 
+        value=format_currency(fin.get("seller_concessions", 0))
+    )
+    fin["seller_concessions"] = parse_currency(sc_str)
+    
     show_flags("financial.purchase_price")
     show_flags("financial.earnest_money")
     show_flags("financial.seller_concessions")
+    
     col1, col2 = st.columns(2)
     fin["financing_type"] = col1.selectbox(
-        "Financing Type",
+        f"Financing Type{line_label('financing_type')}",
         ["conventional", "fha", "va", "usda", "cash", "contract_for_deed", "assumption", "other"],
         index=["conventional", "fha", "va", "usda", "cash", "contract_for_deed", "assumption", "other"].index(fin.get("financing_type", "conventional")),
     )
-    fin["earnest_money_holder"] = col2.text_input("Earnest Money Holder", value=fin.get("earnest_money_holder", "") or "")
+    fin["earnest_money_holder"] = col2.text_input(
+        f"Earnest Money Holder{line_label('earnest_money_holder')}", 
+        value=fin.get("earnest_money_holder", "") or ""
+    )
     show_flags("financial.financing_type")
+    
+    # ── Financing Breakdown ──────────────────────────
+    st.markdown("---")
+    st.markdown("**Financing Breakdown**")
+    
+    purchase_price = fin.get("purchase_price", 0) or 0
+    
+    # Cash
+    cash_pct = fin.get("cash_pct")
+    mortgage_pct = fin.get("mortgage_pct")
+    
+    if cash_pct is not None or mortgage_pct is not None:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        cash_pct_val = cash_pct if cash_pct is not None else 0
+        cash_calc = purchase_price * (cash_pct_val / 100) if purchase_price and cash_pct_val else 0
+        cash_amount = fin.get("cash_amount") or cash_calc
+        
+        col1.text_input(
+            f"CASH %{line_label('cash_pct')}", 
+            value=f"{cash_pct_val}%", disabled=True
+        )
+        col2.text_input(
+            "CASH Amount", 
+            value=format_currency(cash_amount), disabled=True
+        )
+        
+        mortgage_pct_val = mortgage_pct if mortgage_pct is not None else 0
+        mortgage_calc = purchase_price * (mortgage_pct_val / 100) if purchase_price and mortgage_pct_val else 0
+        mortgage_amount = fin.get("mortgage_amount") or mortgage_calc
+        
+        col3.text_input(
+            f"MORTGAGE %{line_label('mortgage_pct')}", 
+            value=f"{mortgage_pct_val}%", disabled=True
+        )
+        col4.text_input(
+            "MORTGAGE Amount", 
+            value=format_currency(mortgage_amount), disabled=True
+        )
+    else:
+        st.caption("No cash/mortgage breakdown found in agreement.")
+    
+    # Assumption — only show if populated
+    assumption_pct = fin.get("assumption_pct")
+    if assumption_pct is not None:
+        col1, col2 = st.columns(2)
+        assumption_calc = purchase_price * (assumption_pct / 100) if purchase_price and assumption_pct else 0
+        assumption_amount = fin.get("assumption_amount") or assumption_calc
+        col1.text_input(
+            f"ASSUMPTION %{line_label('assumption_pct')}", 
+            value=f"{assumption_pct}%", disabled=True
+        )
+        col2.text_input(
+            "ASSUMPTION Amount", 
+            value=format_currency(assumption_amount), disabled=True
+        )
+    
+    # Contract for Deed — only show if populated
+    cfd_pct = fin.get("contract_for_deed_pct")
+    if cfd_pct is not None:
+        col1, col2 = st.columns(2)
+        cfd_calc = purchase_price * (cfd_pct / 100) if purchase_price and cfd_pct else 0
+        cfd_amount = fin.get("contract_for_deed_amount") or cfd_calc
+        col1.text_input(
+            f"CONTRACT FOR DEED %{line_label('contract_for_deed_pct')}", 
+            value=f"{cfd_pct}%", disabled=True
+        )
+        col2.text_input(
+            "CONTRACT FOR DEED Amount", 
+            value=format_currency(cfd_amount), disabled=True
+        )
 
 with tab_dates:
     dates = data.get("dates", {})
     date_fields = [
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
-        ("acceptance_deadline", "Acceptance Deadline"),
-        ("title_commitment_deadline", "Title Commitment Deadline"),
-        ("inspection_deadline", "Inspection Deadline"),
-        ("financing_contingency_deadline", "Financing Contingency Deadline"),
-        ("appraisal_contingency_deadline", "Appraisal Contingency Deadline"),
         ("buyer_signature_date", "Buyer Signature Date"),
         ("seller_signature_date", "Seller Signature Date"),
     ]
     col1, col2 = st.columns(2)
     for i, (key, label) in enumerate(date_fields):
         target = col1 if i % 2 == 0 else col2
-        dates[key] = target.text_input(label, value=dates.get(key, "") or "")
+        dates[key] = target.text_input(
+            f"{label}{line_label(key)}", 
+            value=dates.get(key, "") or ""
+        )
     # Show date flags below the grid
     for key, label in date_fields:
         show_flags(f"dates.{key}")
@@ -296,16 +456,34 @@ with tab_dates:
 with tab_title:
     tc = data.get("title_and_closing", {})
     col1, col2 = st.columns(2)
-    tc["title_company"] = col1.text_input("Title Company", value=tc.get("title_company", "") or "")
-    tc["closing_agent"] = col2.text_input("Closing Agent", value=tc.get("closing_agent", "") or "")
+    tc["title_company"] = col1.text_input(
+        f"Title Company{line_label('title_company')}", 
+        value=tc.get("title_company", "") or ""
+    )
+    tc["closing_agent"] = col2.text_input(
+        f"Closing Agent{line_label('closing_agent')}", 
+        value=tc.get("closing_agent", "") or ""
+    )
     show_flags("title_and_closing.title_company")
     show_flags("title_and_closing.closing_agent")
     col1, col2 = st.columns(2)
-    tc["listing_agent_name"] = col1.text_input("Listing Agent", value=tc.get("listing_agent_name", "") or "")
-    tc["listing_brokerage"] = col2.text_input("Listing Brokerage", value=tc.get("listing_brokerage", "") or "")
+    tc["listing_agent_name"] = col1.text_input(
+        f"Listing Agent{line_label('listing_agent_name')}", 
+        value=tc.get("listing_agent_name", "") or ""
+    )
+    tc["listing_brokerage"] = col2.text_input(
+        "Listing Brokerage", 
+        value=tc.get("listing_brokerage", "") or ""
+    )
     col1, col2 = st.columns(2)
-    tc["selling_agent_name"] = col1.text_input("Selling Agent", value=tc.get("selling_agent_name", "") or "")
-    tc["selling_brokerage"] = col2.text_input("Selling Brokerage", value=tc.get("selling_brokerage", "") or "")
+    tc["selling_agent_name"] = col1.text_input(
+        f"Selling Agent{line_label('selling_agent_name')}", 
+        value=tc.get("selling_agent_name", "") or ""
+    )
+    tc["selling_brokerage"] = col2.text_input(
+        "Selling Brokerage", 
+        value=tc.get("selling_brokerage", "") or ""
+    )
 
 with tab_contingencies:
     cont = data.get("contingencies", {})
@@ -406,4 +584,3 @@ with col4:
 # Preview the text summary inline for quick copy-paste
 with st.expander("📋 Preview Text Summary (click to copy)"):
     st.code(text_summary, language=None)
-

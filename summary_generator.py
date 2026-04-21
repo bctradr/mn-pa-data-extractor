@@ -54,6 +54,9 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     lines.append("-" * 40)
     prop = data.get("property", {})
     lines.append(f"Address: {prop.get('street_address', 'N/A')}")
+    unit = prop.get("unit_no")
+    if unit:
+        lines.append(f"Unit No.: {unit}")
     lines.append(f"City: {prop.get('city', 'N/A')}")
     lines.append(f"County: {prop.get('county', 'N/A')}")
     lines.append(f"State: {prop.get('state', 'Minnesota')}")
@@ -61,7 +64,7 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     pid = prop.get("pid")
     if pid:
         lines.append(f"PID/Parcel #: {pid}")
-    lines.append(f"Legal Description: {prop.get('legal_description', 'N/A')}")
+    lines.append(f"Legal Description from PA: {prop.get('legal_description', 'N/A')}")
     lines.append("")
 
     # Financial
@@ -83,6 +86,23 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     sc = fin.get("seller_concessions")
     if sc:
         lines.append(f"Seller Concessions: ${sc:,.2f}")
+    # Financing breakdown
+    cash_pct = fin.get("cash_pct")
+    if cash_pct is not None:
+        cash_amt = fin.get("cash_amount") or (price * cash_pct / 100 if price else 0)
+        lines.append(f"Cash: {cash_pct}% (${cash_amt:,.2f})")
+    mortgage_pct = fin.get("mortgage_pct")
+    if mortgage_pct is not None:
+        mort_amt = fin.get("mortgage_amount") or (price * mortgage_pct / 100 if price else 0)
+        lines.append(f"Mortgage Financing: {mortgage_pct}% (${mort_amt:,.2f})")
+    assumption_pct = fin.get("assumption_pct")
+    if assumption_pct is not None:
+        assump_amt = fin.get("assumption_amount") or (price * assumption_pct / 100 if price else 0)
+        lines.append(f"Assumption: {assumption_pct}% (${assump_amt:,.2f})")
+    cfd_pct = fin.get("contract_for_deed_pct")
+    if cfd_pct is not None:
+        cfd_amt = fin.get("contract_for_deed_amount") or (price * cfd_pct / 100 if price else 0)
+        lines.append(f"Contract for Deed: {cfd_pct}% (${cfd_amt:,.2f})")
     lines.append("")
 
     # Dates
@@ -93,11 +113,6 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     date_labels = [
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
-        ("acceptance_deadline", "Acceptance Deadline"),
-        ("title_commitment_deadline", "Title Commitment Deadline"),
-        ("inspection_deadline", "Inspection Deadline"),
-        ("financing_contingency_deadline", "Financing Contingency Deadline"),
-        ("appraisal_contingency_deadline", "Appraisal Contingency Deadline"),
         ("buyer_signature_date", "Buyer Signature Date"),
         ("seller_signature_date", "Seller Signature Date"),
     ]
@@ -328,6 +343,9 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     html += "<h2>Property</h2><table>"
     prop = data.get("property", {})
     html += f"<tr><td>Address</td><td>{prop.get('street_address', 'N/A')}</td></tr>"
+    unit = prop.get("unit_no")
+    if unit:
+        html += f"<tr><td>Unit No.</td><td>{unit}</td></tr>"
     html += f"<tr><td>City</td><td>{prop.get('city', 'N/A')}</td></tr>"
     html += f"<tr><td>County</td><td>{prop.get('county', 'N/A')}</td></tr>"
     html += f"<tr><td>State</td><td>{prop.get('state', 'Minnesota')}</td></tr>"
@@ -335,7 +353,7 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     pid = prop.get("pid")
     if pid:
         html += f"<tr><td>PID / Parcel #</td><td>{pid}</td></tr>"
-    html += f"<tr><td>Legal Description</td><td>{prop.get('legal_description', 'N/A')}</td></tr>"
+    html += f"<tr><td>Legal Description from PA</td><td>{prop.get('legal_description', 'N/A')}</td></tr>"
     html += "</table>"
 
     # Financial
@@ -355,6 +373,23 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     sc = fin.get("seller_concessions")
     if sc:
         html += f"<tr><td>Seller Concessions</td><td>${sc:,.2f}</td></tr>"
+    # Financing breakdown
+    cash_pct = fin.get("cash_pct")
+    if cash_pct is not None:
+        cash_amt = fin.get("cash_amount") or (price * cash_pct / 100 if price else 0)
+        html += f"<tr><td>Cash</td><td>{cash_pct}% (${cash_amt:,.2f})</td></tr>"
+    mortgage_pct = fin.get("mortgage_pct")
+    if mortgage_pct is not None:
+        mort_amt = fin.get("mortgage_amount") or (price * mortgage_pct / 100 if price else 0)
+        html += f"<tr><td>Mortgage Financing</td><td>{mortgage_pct}% (${mort_amt:,.2f})</td></tr>"
+    assumption_pct = fin.get("assumption_pct")
+    if assumption_pct is not None:
+        assump_amt = fin.get("assumption_amount") or (price * assumption_pct / 100 if price else 0)
+        html += f"<tr><td>Assumption</td><td>{assumption_pct}% (${assump_amt:,.2f})</td></tr>"
+    cfd_pct = fin.get("contract_for_deed_pct")
+    if cfd_pct is not None:
+        cfd_amt = fin.get("contract_for_deed_amount") or (price * cfd_pct / 100 if price else 0)
+        html += f"<tr><td>Contract for Deed</td><td>{cfd_pct}% (${cfd_amt:,.2f})</td></tr>"
     html += "</table>"
 
     # Dates
@@ -363,11 +398,6 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     date_labels = [
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
-        ("acceptance_deadline", "Acceptance Deadline"),
-        ("title_commitment_deadline", "Title Commitment Deadline"),
-        ("inspection_deadline", "Inspection Deadline"),
-        ("financing_contingency_deadline", "Financing Contingency Deadline"),
-        ("appraisal_contingency_deadline", "Appraisal Contingency Deadline"),
         ("buyer_signature_date", "Buyer Signature Date"),
         ("seller_signature_date", "Seller Signature Date"),
     ]

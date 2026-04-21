@@ -26,6 +26,11 @@ accuracy is critical.
     genuinely unusual situations that a title examiner would need to verify. 
     A flag on a field does NOT mean you skip the field — still give your best extraction, 
     then flag the concern.
+11. LINE NUMBERS: For every extracted field, record the PA form line number where the 
+    data appears in the source_lines object. Use the printed line numbers from the 
+    purchase agreement form (e.g., "12", "34"). If a field spans multiple lines, use 
+    the starting line. If the field comes from an addendum rather than the main form, 
+    use "Addendum" or the addendum name. If no line number is visible, use null.
 
 ## FIELD-SPECIFIC RULES
 
@@ -37,8 +42,17 @@ dates appear with no clear resolution.
 PURCHASE PRICE: If addenda or counteroffers modify the purchase price, ALWAYS use the 
 price from the most recently dated addendum/counteroffer as the final purchase price. 
 Add a flag with issue "conflicting" and a SHORT note like: 
-"Price updated to $X per addendum dated MM/DD/YYYY" — do not include the original price 
-breakdown or lengthy explanation.
+"Price updated to $192,500 per addendum dated 09/14/2018" — do not include the original 
+price breakdown or lengthy explanation.
+
+FINANCING BREAKDOWN: Extract the financing structure from the agreement. Look for lines 
+that specify cash percentage/amount and mortgage financing percentage/amount. These are 
+typically stated as percentages of the purchase price (e.g., "CASH 20%" and 
+"MORTGAGE FINANCING 80%"). Extract the percentages as stated. If dollar amounts are 
+also stated, extract those too; otherwise leave the amounts as null (the app will 
+calculate them from the purchase price and percentages).
+Only extract assumption or contract_for_deed fields if they are explicitly filled in 
+on the agreement. If those lines are blank/empty, use null for all their sub-fields.
 
 GENERAL: Do NOT flag fields that are simply not applicable to the transaction (e.g., no 
 well on a city property, no HOA). Use null for those fields with no flag. Only flag 
@@ -54,6 +68,7 @@ contradictory.
   },
   "property": {
     "street_address": "",
+    "unit_no": null,
     "city": "",
     "county": "",
     "state": "Minnesota",
@@ -68,16 +83,19 @@ contradictory.
     "financing_type": "",
     "financing_type_other": null,
     "down_payment_amount": null,
-    "seller_concessions": null
+    "seller_concessions": null,
+    "cash_pct": null,
+    "cash_amount": null,
+    "mortgage_pct": null,
+    "mortgage_amount": null,
+    "assumption_pct": null,
+    "assumption_amount": null,
+    "contract_for_deed_pct": null,
+    "contract_for_deed_amount": null
   },
   "dates": {
-    "acceptance_deadline": null,
     "closing_date": null,
     "possession_date": null,
-    "title_commitment_deadline": null,
-    "inspection_deadline": null,
-    "financing_contingency_deadline": null,
-    "appraisal_contingency_deadline": null,
     "buyer_signature_date": null,
     "seller_signature_date": null
   },
@@ -110,6 +128,34 @@ contradictory.
   "extraction_metadata": {
     "total_pages": null,
     "form_type": null,
+    "source_lines": {
+      "street_address": null,
+      "unit_no": null,
+      "city": null,
+      "county": null,
+      "zip_code": null,
+      "legal_description": null,
+      "pid": null,
+      "purchase_price": null,
+      "earnest_money_amount": null,
+      "earnest_money_holder": null,
+      "financing_type": null,
+      "cash_pct": null,
+      "mortgage_pct": null,
+      "assumption_pct": null,
+      "contract_for_deed_pct": null,
+      "seller_concessions": null,
+      "closing_date": null,
+      "possession_date": null,
+      "buyer_signature_date": null,
+      "seller_signature_date": null,
+      "title_company": null,
+      "closing_agent": null,
+      "listing_agent_name": null,
+      "selling_agent_name": null,
+      "buyers": null,
+      "sellers": null
+    },
     "flags": [{"field": "", "issue": "", "note": ""}]
   }
 }
@@ -121,6 +167,7 @@ contradictory.
 - financing_type must be one of: conventional, fha, va, usda, cash, contract_for_deed, assumption, other
 - entity_type must be one of: individual, trust, llc, corporation, partnership, other
 - issue must be one of: missing, ambiguous, illegible, conflicting
+- source_lines values should be the line number as a string (e.g., "12", "34", "Addendum") or null
 """
 
 
@@ -141,7 +188,7 @@ with open("purchase_agreement.pdf", "rb") as f:
 
 # Call Claude
 response = client.messages.create(
-    model="claude-sonnet-4-20250514",
+    model="claude-sonnet-4-6",
     max_tokens=4096,
     system=EXTRACTION_SYSTEM_PROMPT,
     messages=[
