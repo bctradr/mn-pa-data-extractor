@@ -33,7 +33,7 @@ st.set_page_config(
     layout="wide",
 )
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 4096
 
 
@@ -191,12 +191,21 @@ if "extraction" not in st.session_state:
 
 data = st.session_state["extraction"]
 
-# ── Flags / warnings at top ──────────────────────────
+# ── Helper: show flags inline below fields ───────────
 flags = data.get("extraction_metadata", {}).get("flags", [])
+
+def get_flags_for(field_prefix: str) -> list:
+    """Return flags matching a field prefix (e.g., 'parties', 'financial.purchase_price')."""
+    return [f for f in flags if f.get("field", "").startswith(field_prefix)]
+
+def show_flags(field_prefix: str):
+    """Display any flags for a field as small warnings below it."""
+    for f in get_flags_for(field_prefix):
+        st.caption(f"⚠️ _{f.get('issue', '?')}_ — {f.get('note', '')}")
+
+# ── Summary flag count at top ─────────────────────────
 if flags:
-    st.warning(f"⚠️ {len(flags)} field(s) flagged for review")
-    for flag in flags:
-        st.caption(f"**{flag['field']}** — {flag['issue']}: {flag['note']}")
+    st.info(f"📋 {len(flags)} field(s) flagged — see notes below each field in the relevant tab.")
 
 # ── Tabbed sections for review/editing ────────────────
 tab_parties, tab_property, tab_financial, tab_dates, tab_title, tab_contingencies, tab_mn, tab_addenda, tab_json = st.tabs([
@@ -215,6 +224,7 @@ with tab_parties:
             index=["individual", "trust", "llc", "corporation", "partnership", "other"].index(buyer.get("entity_type", "individual")),
             key=f"buyer_entity_{i}"
         )
+        show_flags(f"parties.buyers[{i}]")
 
     st.subheader("Sellers")
     for i, seller in enumerate(data.get("parties", {}).get("sellers", [])):
@@ -226,17 +236,23 @@ with tab_parties:
             index=["individual", "trust", "llc", "corporation", "partnership", "other"].index(seller.get("entity_type", "individual")),
             key=f"seller_entity_{i}"
         )
+        show_flags(f"parties.sellers[{i}]")
 
 with tab_property:
     prop = data.get("property", {})
     col1, col2 = st.columns(2)
     prop["street_address"] = col1.text_input("Street Address", value=prop.get("street_address", ""))
     prop["city"] = col2.text_input("City", value=prop.get("city", ""))
+    show_flags("property.street_address")
+    show_flags("property.city")
     col1, col2, col3 = st.columns(3)
     prop["county"] = col1.text_input("County", value=prop.get("county", ""))
     prop["zip_code"] = col2.text_input("Zip Code", value=prop.get("zip_code", ""))
     prop["pid"] = col3.text_input("PID / Parcel #", value=prop.get("pid", "") or "")
+    show_flags("property.county")
+    show_flags("property.pid")
     prop["legal_description"] = st.text_area("Legal Description", value=prop.get("legal_description", ""), height=100)
+    show_flags("property.legal_description")
 
 with tab_financial:
     fin = data.get("financial", {})
@@ -244,6 +260,9 @@ with tab_financial:
     fin["purchase_price"] = col1.number_input("Purchase Price", value=float(fin.get("purchase_price", 0)))
     fin["earnest_money_amount"] = col2.number_input("Earnest Money", value=float(fin.get("earnest_money_amount", 0)))
     fin["seller_concessions"] = col3.number_input("Seller Concessions", value=float(fin.get("seller_concessions", 0) or 0))
+    show_flags("financial.purchase_price")
+    show_flags("financial.earnest_money")
+    show_flags("financial.seller_concessions")
     col1, col2 = st.columns(2)
     fin["financing_type"] = col1.selectbox(
         "Financing Type",
@@ -251,6 +270,7 @@ with tab_financial:
         index=["conventional", "fha", "va", "usda", "cash", "contract_for_deed", "assumption", "other"].index(fin.get("financing_type", "conventional")),
     )
     fin["earnest_money_holder"] = col2.text_input("Earnest Money Holder", value=fin.get("earnest_money_holder", "") or "")
+    show_flags("financial.financing_type")
 
 with tab_dates:
     dates = data.get("dates", {})
@@ -269,12 +289,17 @@ with tab_dates:
     for i, (key, label) in enumerate(date_fields):
         target = col1 if i % 2 == 0 else col2
         dates[key] = target.text_input(label, value=dates.get(key, "") or "")
+    # Show date flags below the grid
+    for key, label in date_fields:
+        show_flags(f"dates.{key}")
 
 with tab_title:
     tc = data.get("title_and_closing", {})
     col1, col2 = st.columns(2)
     tc["title_company"] = col1.text_input("Title Company", value=tc.get("title_company", "") or "")
     tc["closing_agent"] = col2.text_input("Closing Agent", value=tc.get("closing_agent", "") or "")
+    show_flags("title_and_closing.title_company")
+    show_flags("title_and_closing.closing_agent")
     col1, col2 = st.columns(2)
     tc["listing_agent_name"] = col1.text_input("Listing Agent", value=tc.get("listing_agent_name", "") or "")
     tc["listing_brokerage"] = col2.text_input("Listing Brokerage", value=tc.get("listing_brokerage", "") or "")
@@ -292,16 +317,20 @@ with tab_contingencies:
     cont["sale_of_buyers_property"] = col2.checkbox("Sale of Buyer's Property", value=cont.get("sale_of_buyers_property", False))
     other = cont.get("other_contingencies", [])
     cont["other_contingencies_text"] = st.text_input("Other Contingencies (semicolon-separated)", value="; ".join(other))
+    show_flags("contingencies")
 
 with tab_mn:
     mn = data.get("mn_specific_disclosures", {})
     col1, col2, col3 = st.columns(3)
     mn["well_disclosure_present"] = col1.checkbox("Well Disclosure Present", value=mn.get("well_disclosure_present", False))
     mn["well_number"] = col1.text_input("Well Number (MDH)", value=mn.get("well_number", "") or "")
+    show_flags("mn_specific_disclosures.well")
     mn["septic_disclosure_present"] = col2.checkbox("Septic Disclosure Present", value=mn.get("septic_disclosure_present", False))
     mn["septic_system_type"] = col2.text_input("Septic System Type", value=mn.get("septic_system_type", "") or "")
+    show_flags("mn_specific_disclosures.septic")
     mn["hoa_present"] = col3.checkbox("HOA Present", value=mn.get("hoa_present", False))
     mn["hoa_name"] = col3.text_input("HOA Name", value=mn.get("hoa_name", "") or "")
+    show_flags("mn_specific_disclosures.hoa")
 
 with tab_addenda:
     addenda = data.get("addenda", [])
