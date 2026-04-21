@@ -230,8 +230,14 @@ data = st.session_state["extraction"]
 flags = data.get("extraction_metadata", {}).get("flags", [])
 
 def get_flags_for(field_prefix: str) -> list:
-    """Return flags matching a field prefix."""
-    return [f for f in flags if f.get("field", "").startswith(field_prefix)]
+    """Return flags matching by full dotted path or short field name.
+    Claude may return field names as 'sellers' or 'parties.sellers[0].name',
+    so we match both the full prefix and the base name extracted from it."""
+    prefix_last = field_prefix.split(".")[-1].split("[")[0]
+    return [f for f in flags if 
+        f.get("field", "").startswith(field_prefix) or
+        f.get("field", "").startswith(prefix_last)
+    ]
 
 def show_flags(field_prefix: str):
     """Display any flags for a field as small warnings below it."""
