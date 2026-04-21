@@ -59,6 +59,10 @@ well on a city property, no HOA). Use null for those fields with no flag. Only f
 fields where the document contains information that is ambiguous, illegible, or 
 contradictory.
 
+NAMES: Always flag a buyer or seller name if it was inferred from an electronic signature 
+(AuthentiSign, DocuSign, DotLoop, etc.) rather than a printed name field. The full legal 
+name may differ from the signature rendering.
+
 ## OUTPUT SCHEMA
 
 {
