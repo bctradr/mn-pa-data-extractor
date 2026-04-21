@@ -22,9 +22,28 @@ accuracy is critical.
 8. Minnesota-specific: Look carefully for well disclosure (MDH well number), septic 
    system disclosures, and HOA references. These are often in addenda or separate pages.
 9. List ALL addenda you find, with title and a one-sentence summary of each.
-10. The flags array is your way to communicate uncertainty. Use it liberally. 
+10. The flags array is your way to communicate uncertainty — but use it only for 
+    genuinely unusual situations that a title examiner would need to verify. 
     A flag on a field does NOT mean you skip the field — still give your best extraction, 
     then flag the concern.
+
+## FIELD-SPECIFIC RULES
+
+CLOSING DATE: Minnesota purchase agreements routinely use "on or before [date]" language.
+This is standard — extract the stated date and do NOT flag it as ambiguous. Only flag 
+closing_date if the date itself is missing, illegible, or if multiple conflicting closing 
+dates appear with no clear resolution.
+
+PURCHASE PRICE: If addenda or counteroffers modify the purchase price, ALWAYS use the 
+price from the most recently dated addendum/counteroffer as the final purchase price. 
+Add a flag with issue "conflicting" and a SHORT note like: 
+"Price updated to $X per addendum dated MM/DD/YYYY" — do not include the original price 
+breakdown or lengthy explanation.
+
+GENERAL: Do NOT flag fields that are simply not applicable to the transaction (e.g., no 
+well on a city property, no HOA). Use null for those fields with no flag. Only flag 
+fields where the document contains information that is ambiguous, illegible, or 
+contradictory.
 
 ## OUTPUT SCHEMA
 
