@@ -111,6 +111,7 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     lines.append("-" * 40)
     dates = data.get("dates", {})
     date_labels = [
+        ("purchase_agreement_date", "Purchase Agreement Date"),
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
         ("buyer_signature_date", "Buyer Signature Date"),
@@ -396,6 +397,7 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     html += "<h2>Key Dates</h2><table>"
     dates = data.get("dates", {})
     date_labels = [
+        ("purchase_agreement_date", "Purchase Agreement Date"),
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
         ("buyer_signature_date", "Buyer Signature Date"),

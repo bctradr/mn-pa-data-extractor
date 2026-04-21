@@ -94,6 +94,7 @@ contradictory.
     "contract_for_deed_amount": null
   },
   "dates": {
+    "purchase_agreement_date": null,
     "closing_date": null,
     "possession_date": null,
     "buyer_signature_date": null,
@@ -145,6 +146,7 @@ contradictory.
       "assumption_pct": null,
       "contract_for_deed_pct": null,
       "seller_concessions": null,
+      "purchase_agreement_date": null,
       "closing_date": null,
       "possession_date": null,
       "buyer_signature_date": null,

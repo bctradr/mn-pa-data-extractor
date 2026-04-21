@@ -437,6 +437,7 @@ with tab_financial:
 with tab_dates:
     dates = data.get("dates", {})
     date_fields = [
+        ("purchase_agreement_date", "Purchase Agreement Date"),
         ("closing_date", "Closing Date"),
         ("possession_date", "Possession Date"),
         ("buyer_signature_date", "Buyer Signature Date"),
