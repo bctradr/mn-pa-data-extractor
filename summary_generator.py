@@ -163,39 +163,79 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
         lines.append("Other: " + "; ".join(other))
     lines.append("")
 
-    # MN Disclosures
+    # Well/Septic
     lines.append("-" * 40)
-    lines.append("MN-SPECIFIC DISCLOSURES")
+    lines.append("WELL / SEPTIC")
     lines.append("-" * 40)
-    mn = data.get("mn_specific_disclosures", {})
-    well = "Yes" if mn.get("well_disclosure_present") else "No"
-    lines.append(f"Well Disclosure: {well}")
-    wn = mn.get("well_number")
+    ws = data.get("well_septic", {})
+    pa_well = ws.get("pa_well_known")
+    if pa_well:
+        lines.append(f"PA — Seller knows of wells: {pa_well}")
+    pa_well_on = ws.get("pa_well_on_property")
+    if pa_well_on:
+        lines.append(f"PA — Well on property: {pa_well_on}")
+    pa_ssts = ws.get("pa_ssts_on_property")
+    if pa_ssts:
+        lines.append(f"PA — SSTS on property: {pa_ssts}")
+    disc_well = ws.get("disclosure_well_info")
+    if disc_well:
+        lines.append(f"Disclosure — Well: {disc_well}")
+    disc_ssts = ws.get("disclosure_ssts_info")
+    if disc_ssts:
+        lines.append(f"Disclosure — SSTS: {disc_ssts}")
+    wn = ws.get("well_number")
     if wn:
         lines.append(f"Well Number (MDH): {wn}")
-    septic = "Yes" if mn.get("septic_disclosure_present") else "No"
-    lines.append(f"Septic Disclosure: {septic}")
-    st_val = mn.get("septic_system_type")
-    if st_val:
-        lines.append(f"Septic Type: {st_val}")
-    hoa = "Yes" if mn.get("hoa_present") else "No"
-    lines.append(f"HOA: {hoa}")
-    hoa_name = mn.get("hoa_name")
-    if hoa_name:
-        lines.append(f"HOA Name: {hoa_name}")
-    hoa_dues = mn.get("hoa_dues_amount")
-    if hoa_dues:
-        freq = mn.get("hoa_dues_frequency", "")
-        lines.append(f"HOA Dues: ${hoa_dues:,.2f} {freq}")
+    if ws.get("discrepancy_flag"):
+        lines.append("⚠ DISCREPANCY between PA and Disclosure Statement")
+    lines.append("")
+
+    # HOA
+    hoa_data = data.get("hoa", {})
+    if hoa_data.get("hoa_present"):
+        lines.append("-" * 40)
+        lines.append("HOA / ASSOCIATION")
+        lines.append("-" * 40)
+        lines.append(f"HOA Present: Yes")
+        hoa_name = hoa_data.get("hoa_name")
+        if hoa_name:
+            lines.append(f"HOA Name: {hoa_name}")
+        hoa_dues = hoa_data.get("hoa_dues_amount")
+        if hoa_dues:
+            freq = hoa_data.get("hoa_dues_frequency", "")
+            lines.append(f"HOA Dues: ${hoa_dues:,.2f} {freq}")
+        lines.append("")
+
+    # Home Warranty
+    hw = data.get("home_warranty", {})
+    hw_details = hw.get("plan_details", "No Home Protection/Warranty Plan")
+    lines.append(f"Home Warranty: {hw_details or 'No Home Protection/Warranty Plan'}")
+
+    # Other Terms
+    other_terms = data.get("other_terms")
+    if other_terms:
+        lines.append(f"Other Terms: {other_terms}")
+
+    # FIRPTA
+    firpta = data.get("firpta", {})
+    is_foreign = firpta.get("seller_is_foreign_person")
+    if is_foreign is True:
+        lines.append("FIRPTA: Seller IS a foreign person")
+    elif is_foreign is False:
+        lines.append("FIRPTA: Seller IS NOT a foreign person")
     lines.append("")
 
     # Addenda
     addenda = data.get("addenda", [])
-    if addenda:
+    excluded = ["wire fraud", "arbitration", "lead-based paint", "lead based paint"]
+    filtered = [a for a in addenda if not any(
+        ex in a.get("addendum_title", "").lower() for ex in excluded
+    )]
+    if filtered:
         lines.append("-" * 40)
         lines.append("ADDENDA")
         lines.append("-" * 40)
-        for i, a in enumerate(addenda, 1):
+        for i, a in enumerate(filtered, 1):
             title = a.get("addendum_title", f"Addendum {i}")
             summary = a.get("summary", "")
             date = a.get("addendum_date", "")
@@ -445,35 +485,70 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
         html += f"<tr><td>Other</td><td>{'; '.join(other)}</td></tr>"
     html += "</table>"
 
-    # MN Disclosures
-    html += "<h2>MN-Specific Disclosures</h2><table>"
-    mn = data.get("mn_specific_disclosures", {})
-    well = "Yes" if mn.get("well_disclosure_present") else "No"
-    html += f"<tr><td>Well Disclosure</td><td>{well}</td></tr>"
-    wn = mn.get("well_number")
+    # Well/Septic
+    html += "<h2>Well / Septic</h2><table>"
+    ws = data.get("well_septic", {})
+    pa_well = ws.get("pa_well_known")
+    if pa_well:
+        html += f"<tr><td>PA — Seller knows of wells</td><td>{pa_well}</td></tr>"
+    pa_well_on = ws.get("pa_well_on_property")
+    if pa_well_on:
+        html += f"<tr><td>PA — Well on property</td><td>{pa_well_on}</td></tr>"
+    pa_ssts = ws.get("pa_ssts_on_property")
+    if pa_ssts:
+        html += f"<tr><td>PA — SSTS on property</td><td>{pa_ssts}</td></tr>"
+    disc_well = ws.get("disclosure_well_info")
+    if disc_well:
+        html += f"<tr><td>Disclosure — Well</td><td>{disc_well}</td></tr>"
+    disc_ssts = ws.get("disclosure_ssts_info")
+    if disc_ssts:
+        html += f"<tr><td>Disclosure — SSTS</td><td>{disc_ssts}</td></tr>"
+    wn = ws.get("well_number")
     if wn:
         html += f"<tr><td>Well Number (MDH)</td><td>{wn}</td></tr>"
-    septic = "Yes" if mn.get("septic_disclosure_present") else "No"
-    html += f"<tr><td>Septic Disclosure</td><td>{septic}</td></tr>"
-    st_val = mn.get("septic_system_type")
-    if st_val:
-        html += f"<tr><td>Septic Type</td><td>{st_val}</td></tr>"
-    hoa = "Yes" if mn.get("hoa_present") else "No"
-    html += f"<tr><td>HOA</td><td>{hoa}</td></tr>"
-    hoa_name = mn.get("hoa_name")
-    if hoa_name:
-        html += f"<tr><td>HOA Name</td><td>{hoa_name}</td></tr>"
-    hoa_dues = mn.get("hoa_dues_amount")
-    if hoa_dues:
-        freq = mn.get("hoa_dues_frequency", "")
-        html += f"<tr><td>HOA Dues</td><td>${hoa_dues:,.2f} {freq}</td></tr>"
+    html += "</table>"
+    if ws.get("discrepancy_flag"):
+        html += '<div class="flag"><span class="flag-label">Well/Septic</span>: Discrepancy between PA and Disclosure Statement</div>'
+
+    # HOA
+    hoa_data = data.get("hoa", {})
+    if hoa_data.get("hoa_present"):
+        html += "<h2>HOA / Association</h2><table>"
+        html += "<tr><td>HOA Present</td><td>Yes</td></tr>"
+        hoa_name = hoa_data.get("hoa_name")
+        if hoa_name:
+            html += f"<tr><td>HOA Name</td><td>{hoa_name}</td></tr>"
+        hoa_dues = hoa_data.get("hoa_dues_amount")
+        if hoa_dues:
+            freq = hoa_data.get("hoa_dues_frequency", "")
+            html += f"<tr><td>HOA Dues</td><td>${hoa_dues:,.2f} {freq}</td></tr>"
+        html += "</table>"
+
+    # Home Warranty, Other Terms, FIRPTA
+    html += "<h2>Additional</h2><table>"
+    hw = data.get("home_warranty", {})
+    hw_details = hw.get("plan_details", "No Home Protection/Warranty Plan")
+    html += f"<tr><td>Home Warranty</td><td>{hw_details or 'No Home Protection/Warranty Plan'}</td></tr>"
+    other_terms = data.get("other_terms")
+    if other_terms:
+        html += f"<tr><td>Other Terms</td><td>{other_terms}</td></tr>"
+    firpta = data.get("firpta", {})
+    is_foreign = firpta.get("seller_is_foreign_person")
+    if is_foreign is True:
+        html += "<tr><td>FIRPTA</td><td>Seller IS a foreign person</td></tr>"
+    elif is_foreign is False:
+        html += "<tr><td>FIRPTA</td><td>Seller IS NOT a foreign person</td></tr>"
     html += "</table>"
 
-    # Addenda
+    # Addenda — filtered
     addenda = data.get("addenda", [])
-    if addenda:
+    excluded = ["wire fraud", "arbitration", "lead-based paint", "lead based paint"]
+    filtered = [a for a in addenda if not any(
+        ex in a.get("addendum_title", "").lower() for ex in excluded
+    )]
+    if filtered:
         html += "<h2>Addenda</h2>"
-        for i, a in enumerate(addenda, 1):
+        for i, a in enumerate(filtered, 1):
             title = a.get("addendum_title", f"Addendum {i}")
             summary = a.get("summary", "")
             date = a.get("addendum_date", "")

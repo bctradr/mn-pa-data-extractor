@@ -160,10 +160,27 @@ def flatten_for_csv(data: dict) -> dict:
         flat[key] = cont.get(key)
     flat["other_contingencies"] = "; ".join(cont.get("other_contingencies", []))
 
-    # MN Disclosures
-    mn = data.get("mn_specific_disclosures", {})
-    for key in mn:
-        flat[key] = mn.get(key)
+    # Well/Septic
+    ws = data.get("well_septic", {})
+    for key in ws:
+        flat[f"ws_{key}"] = ws.get(key)
+
+    # HOA
+    hoa = data.get("hoa", {})
+    for key in hoa:
+        flat[f"hoa_{key}"] = hoa.get(key)
+
+    # Home Warranty
+    hw = data.get("home_warranty", {})
+    flat["home_warranty_included"] = hw.get("plan_included")
+    flat["home_warranty_details"] = hw.get("plan_details")
+
+    # Other Terms
+    flat["other_terms"] = data.get("other_terms")
+
+    # FIRPTA
+    firpta = data.get("firpta", {})
+    flat["firpta_foreign_person"] = firpta.get("seller_is_foreign_person")
 
     # Addenda count
     flat["addenda_count"] = len(data.get("addenda", []))
@@ -256,9 +273,9 @@ if flags:
     st.info(f"📋 {len(flags)} field(s) flagged — see notes below each field in the relevant tab.")
 
 # ── Tabbed sections for review/editing ────────────────
-tab_parties, tab_property, tab_financial, tab_dates, tab_title, tab_contingencies, tab_mn, tab_addenda, tab_json = st.tabs([
+tab_parties, tab_property, tab_financial, tab_dates, tab_title, tab_contingencies, tab_wellseptic, tab_addenda, tab_json = st.tabs([
     "Parties", "Property", "Financial", "Dates",
-    "Title/Closing", "Contingencies", "MN Disclosures", "Addenda", "Raw JSON"
+    "Title/Closing", "Contingencies", "Well/Septic", "Addenda", "Raw JSON"
 ])
 
 with tab_parties:
@@ -404,7 +421,7 @@ with tab_financial:
             value=f"{mortgage_pct_val}%", disabled=True
         )
         col4.text_input(
-            "MORTGAGE Amount", 
+            "Mortgage Amount (est. based on PA)", 
             value=format_currency(mortgage_amount), disabled=True
         )
     else:
@@ -501,26 +518,122 @@ with tab_contingencies:
     cont["appraisal_contingency"] = col1.checkbox("Appraisal Contingency", value=cont.get("appraisal_contingency", False))
     cont["sale_of_buyers_property"] = col2.checkbox("Sale of Buyer's Property", value=cont.get("sale_of_buyers_property", False))
     other = cont.get("other_contingencies", [])
-    cont["other_contingencies_text"] = st.text_input("Other Contingencies (semicolon-separated)", value="; ".join(other))
+    if other:
+        st.markdown("**Other Contingencies:**")
+        for i, item in enumerate(other):
+            st.text_input(f"Contingency {i+1}", value=item, key=f"other_cont_{i}")
+    else:
+        st.caption("No other contingencies detected.")
     show_flags("contingencies")
+    
+    # ── Other Terms (line ~454) ──────────────────────
+    st.markdown("---")
+    st.markdown("**Other Terms**")
+    other_terms = data.get("other_terms")
+    if other_terms:
+        st.text_area(
+            f"Other{line_label('other_terms')}", 
+            value=other_terms, height=80, key="other_terms"
+        )
+    else:
+        st.caption("No other terms found.")
+    
+    # ── Home Warranty (lines ~385-392) ───────────────
+    st.markdown("---")
+    st.markdown("**Home Warranty**")
+    hw = data.get("home_warranty", {})
+    hw_details = hw.get("plan_details", "No Home Protection/Warranty Plan")
+    st.text_input(
+        f"Home Warranty{line_label('home_warranty')}", 
+        value=hw_details or "No Home Protection/Warranty Plan", key="home_warranty"
+    )
+    
+    # ── FIRPTA (line ~493) ───────────────────────────
+    st.markdown("---")
+    st.markdown("**FIRPTA**")
+    firpta = data.get("firpta", {})
+    is_foreign = firpta.get("seller_is_foreign_person")
+    if is_foreign is True:
+        firpta_text = "Seller IS a foreign person"
+    elif is_foreign is False:
+        firpta_text = "Seller IS NOT a foreign person"
+    else:
+        firpta_text = "Not stated"
+    st.text_input(
+        f"FIRPTA Status{line_label('firpta')}", 
+        value=firpta_text, key="firpta_status"
+    )
 
-with tab_mn:
-    mn = data.get("mn_specific_disclosures", {})
-    col1, col2, col3 = st.columns(3)
-    mn["well_disclosure_present"] = col1.checkbox("Well Disclosure Present", value=mn.get("well_disclosure_present", False))
-    mn["well_number"] = col1.text_input("Well Number (MDH)", value=mn.get("well_number", "") or "")
-    show_flags("mn_specific_disclosures.well")
-    mn["septic_disclosure_present"] = col2.checkbox("Septic Disclosure Present", value=mn.get("septic_disclosure_present", False))
-    mn["septic_system_type"] = col2.text_input("Septic System Type", value=mn.get("septic_system_type", "") or "")
-    show_flags("mn_specific_disclosures.septic")
-    mn["hoa_present"] = col3.checkbox("HOA Present", value=mn.get("hoa_present", False))
-    mn["hoa_name"] = col3.text_input("HOA Name", value=mn.get("hoa_name", "") or "")
-    show_flags("mn_specific_disclosures.hoa")
+with tab_wellseptic:
+    ws = data.get("well_septic", {})
+    
+    st.subheader("From Purchase Agreement")
+    col1, col2 = st.columns(2)
+    col1.text_input(
+        f"Seller knows of wells{line_label('pa_well_known')}", 
+        value=ws.get("pa_well_known", "") or "Not stated", key="pa_well_known"
+    )
+    col2.text_input(
+        f"Well on property{line_label('pa_well_on_property')}", 
+        value=ws.get("pa_well_on_property", "") or "Not stated", key="pa_well_on_property"
+    )
+    st.text_input(
+        f"SSTS on property{line_label('pa_ssts_on_property')}", 
+        value=ws.get("pa_ssts_on_property", "") or "Not stated", key="pa_ssts"
+    )
+    pa_notes = ws.get("pa_well_septic_notes")
+    if pa_notes:
+        st.text_area("PA Notes", value=pa_notes, height=60, key="pa_ws_notes")
+    
+    st.subheader("From Disclosure Statement")
+    disc_well = ws.get("disclosure_well_info")
+    disc_ssts = ws.get("disclosure_ssts_info")
+    if disc_well or disc_ssts:
+        if disc_well:
+            st.text_input("Disclosure — Well", value=disc_well, key="disc_well")
+        if disc_ssts:
+            st.text_input("Disclosure — SSTS", value=disc_ssts, key="disc_ssts")
+    else:
+        st.caption("No well/septic info found in Disclosure Statement.")
+    
+    well_num = ws.get("well_number")
+    if well_num:
+        st.text_input("Well Number (MDH)", value=well_num, key="well_num")
+    
+    if ws.get("discrepancy_flag"):
+        st.warning("⚠️ Discrepancy detected between PA and Disclosure Statement — review well/septic details.")
+    
+    show_flags("well_septic")
+    show_flags("well")
+    show_flags("septic")
+    show_flags("ssts")
 
 with tab_addenda:
+    # HOA section at top of addenda tab
+    hoa = data.get("hoa", {})
+    if hoa.get("hoa_present"):
+        st.subheader("HOA / Association")
+        col1, col2 = st.columns(2)
+        col1.text_input("HOA Name", value=hoa.get("hoa_name", "") or "", key="hoa_name")
+        dues = hoa.get("hoa_dues_amount")
+        freq = hoa.get("hoa_dues_frequency", "") or ""
+        if dues:
+            col2.text_input("HOA Dues", value=f"${dues:,.2f} {freq}", key="hoa_dues")
+        else:
+            col2.text_input("HOA Dues", value="Not stated in PA", key="hoa_dues")
+        show_flags("hoa")
+        st.markdown("---")
+    
+    # Addenda listing — filtered
     addenda = data.get("addenda", [])
-    if addenda:
-        for i, add in enumerate(addenda):
+    excluded = ["wire fraud", "arbitration", "lead-based paint", "lead based paint"]
+    filtered = [a for a in addenda if not any(
+        ex in a.get("addendum_title", "").lower() for ex in excluded
+    )]
+    
+    st.subheader("Addenda")
+    if filtered:
+        for i, add in enumerate(filtered):
             st.markdown(f"**{add.get('addendum_title', f'Addendum {i+1}')}**")
             st.caption(add.get("summary", ""))
     else:

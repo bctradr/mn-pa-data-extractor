@@ -41,9 +41,20 @@ dates appear with no clear resolution.
 
 PURCHASE PRICE: If addenda or counteroffers modify the purchase price, ALWAYS use the 
 price from the most recently dated addendum/counteroffer as the final purchase price. 
-Add a flag with issue "conflicting" and a SHORT note like: 
-"Price updated to $192,500 per addendum dated 09/14/2018" — do not include the original 
-price breakdown or lengthy explanation.
+Add a flag with issue "note" and a SHORT note like: 
+"Price updated to $192,500 per counteroffer addendum dated 09/14/2018; original PA 
+stated $190,000 on line 34."
+
+EARNEST MONEY HOLDER: If the optional earnest money holder checkbox/line is blank or 
+unchecked, the listing broker is the earnest money holder by default. Enter the listing 
+broker name as earnest_money_holder. Do NOT flag this as ambiguous. Only flag if the 
+checkbox IS populated with a different holder and there is a genuine conflict.
+
+POSSESSION DATE: If possession is stated as "immediately after closing" or "at closing" 
+or similar, use the closing date as the possession date. Do NOT flag this — it is the 
+most common arrangement. Only add a flag with issue "note" if the possession date is 
+DIFFERENT from the closing date, with a note like: "Possession date is X days 
+after(before) closing."
 
 FINANCING BREAKDOWN: Extract the financing structure from the agreement. Look for lines 
 that specify cash percentage/amount and mortgage financing percentage/amount. These are 
@@ -59,9 +70,44 @@ well on a city property, no HOA). Use null for those fields with no flag. Only f
 fields where the document contains information that is ambiguous, illegible, or 
 contradictory.
 
-NAMES: Always flag a buyer or seller name if it was inferred from an electronic signature 
-(AuthentiSign, DocuSign, DotLoop, etc.) rather than a printed name field. The full legal 
-name may differ from the signature rendering.
+NAMES: If a buyer or seller name was taken from the printed name field on the PA AND the 
+electronic signature renders it differently (e.g., middle name vs initial), flag as 
+"note" — the printed name field governs but note the signature difference. Only flag as 
+"ambiguous" if the printed name field is blank and the name is inferred solely from an 
+electronic signature (AuthentiSign, DocuSign, DotLoop, etc.).
+
+WELL AND SEPTIC: Extract detailed information from BOTH the PA (typically lines 369-384) 
+AND the Seller's Property Disclosure Statement (if present). For the PA, look at:
+- Line ~371: whether seller knows of any wells on the property
+- Line ~373: whether there is a well on the property  
+- Line ~377: whether there is a subsurface sewage treatment system (SSTS)
+For the Disclosure Statement, look for Section D or equivalent well/septic sections.
+Record what each source says. If there is a discrepancy between the PA and the Disclosure 
+Statement, flag it. If either a well or SSTS IS present (affirmative), flag as "note" 
+since additional addenda (Well Statement, SSTS Disclosure) should be expected.
+
+HOME WARRANTY: Look at lines ~385-392 for home protection/warranty plan information. 
+Extract whether a plan is included and any details. If no plan, extract as 
+"No Home Protection/Warranty Plan".
+
+OTHER TERMS: Look at lines ~454+ for the "OTHER" section. Extract any terms written 
+there verbatim.
+
+FIRPTA: Look at line ~493 for the Foreign Investment in Real Property Tax Act disclosure. 
+Extract whether the seller IS or IS NOT a foreign person as defined by FIRPTA.
+
+HOA/ASSOCIATION: If an HOA/association is indicated (e.g., via a CIC addendum or checkbox 
+on the PA), set hoa_present to true. The HOA name and dues amount are almost never 
+included in the PA itself — if they are not stated, use null but flag as "note" (not 
+"missing") with a note like "HOA name/dues not stated in PA; verify separately." If the 
+HOA name or dues ARE stated anywhere in the documents, extract them.
+
+ADDENDA FILTERING: When listing addenda, EXCLUDE the following standard documents — 
+do not include them in the addenda array:
+- Wire Fraud Alert
+- Arbitration Disclosure / Arbitration Agreement
+- Lead-Based Paint Disclosure (Disclosure of Information on Lead-Based Paint)
+Include all other addenda, counteroffers, CIC/condo addenda, disclosure statements, etc.
 
 ## OUTPUT SCHEMA
 
@@ -119,15 +165,29 @@ name may differ from the signature rendering.
     "sale_of_buyers_property": false,
     "other_contingencies": []
   },
-  "mn_specific_disclosures": {
-    "well_disclosure_present": false,
+  "well_septic": {
+    "pa_well_known": null,
+    "pa_well_on_property": null,
+    "pa_ssts_on_property": null,
+    "pa_well_septic_notes": null,
+    "disclosure_well_info": null,
+    "disclosure_ssts_info": null,
     "well_number": null,
-    "septic_disclosure_present": false,
-    "septic_system_type": null,
+    "discrepancy_flag": false
+  },
+  "hoa": {
     "hoa_present": false,
     "hoa_name": null,
     "hoa_dues_amount": null,
     "hoa_dues_frequency": null
+  },
+  "home_warranty": {
+    "plan_included": false,
+    "plan_details": null
+  },
+  "other_terms": null,
+  "firpta": {
+    "seller_is_foreign_person": null
   },
   "addenda": [{"addendum_title": "", "addendum_date": null, "summary": ""}],
   "extraction_metadata": {
@@ -160,7 +220,13 @@ name may differ from the signature rendering.
       "listing_agent_name": null,
       "selling_agent_name": null,
       "buyers": null,
-      "sellers": null
+      "sellers": null,
+      "pa_well_known": null,
+      "pa_well_on_property": null,
+      "pa_ssts_on_property": null,
+      "home_warranty": null,
+      "other_terms": null,
+      "firpta": null
     },
     "flags": [{"field": "", "issue": "", "note": ""}]
   }
@@ -172,7 +238,7 @@ name may differ from the signature rendering.
 - Do NOT return anything outside the JSON object. No preamble. No explanation.
 - financing_type must be one of: conventional, fha, va, usda, cash, contract_for_deed, assumption, other
 - entity_type must be one of: individual, trust, llc, corporation, partnership, other
-- issue must be one of: missing, ambiguous, illegible, conflicting
+- issue must be one of: missing, ambiguous, illegible, conflicting, note
 - source_lines values should be the line number as a string (e.g., "12", "34", "Addendum") or null
 """
 
