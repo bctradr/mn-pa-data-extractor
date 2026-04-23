@@ -55,6 +55,7 @@ def extract_from_pdf(pdf_bytes: bytes) -> dict:
     response = client.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
+        temperature=0,    
         system=EXTRACTION_SYSTEM_PROMPT,
         messages=[
             {
