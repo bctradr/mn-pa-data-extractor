@@ -55,7 +55,7 @@ def extract_from_pdf(pdf_bytes: bytes) -> dict:
     response = client.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        temperature=0,    
+        temperature=0,
         system=EXTRACTION_SYSTEM_PROMPT,
         messages=[
             {
@@ -310,6 +310,21 @@ with tab_parties:
         )
         show_flags(f"parties.sellers[{i}]")
 
+    # ── FIRPTA (line ~493) ───────────────────────────
+    st.markdown("---")
+    firpta = data.get("firpta", {})
+    is_foreign = firpta.get("seller_is_foreign_person")
+    if is_foreign is True:
+        firpta_text = "Seller IS a foreign person"
+    elif is_foreign is False:
+        firpta_text = "Seller IS NOT a foreign person"
+    else:
+        firpta_text = "Not stated"
+    st.text_input(
+        f"FIRPTA Status{line_label('firpta')}", 
+        value=firpta_text, key="firpta_status"
+    )
+
 with tab_property:
     prop = data.get("property", {})
     col1, col2, col3 = st.columns([3, 1, 2])
@@ -547,22 +562,6 @@ with tab_contingencies:
     st.text_input(
         f"Home Warranty{line_label('home_warranty')}", 
         value=hw_details or "No Home Protection/Warranty Plan", key="home_warranty"
-    )
-    
-    # ── FIRPTA (line ~493) ───────────────────────────
-    st.markdown("---")
-    st.markdown("**FIRPTA**")
-    firpta = data.get("firpta", {})
-    is_foreign = firpta.get("seller_is_foreign_person")
-    if is_foreign is True:
-        firpta_text = "Seller IS a foreign person"
-    elif is_foreign is False:
-        firpta_text = "Seller IS NOT a foreign person"
-    else:
-        firpta_text = "Not stated"
-    st.text_input(
-        f"FIRPTA Status{line_label('firpta')}", 
-        value=firpta_text, key="firpta_status"
     )
 
 with tab_wellseptic:
