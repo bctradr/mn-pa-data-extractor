@@ -169,14 +169,11 @@ def generate_text_summary(data: dict, filename: str = "") -> str:
     lines.append("-" * 40)
     ws = data.get("well_septic", {})
     pa_well = ws.get("pa_well_known")
-    if pa_well:
-        lines.append(f"PA — Seller knows of wells: {pa_well}")
-    pa_well_on = ws.get("pa_well_on_property")
-    if pa_well_on:
-        lines.append(f"PA — Well on property: {pa_well_on}")
+    well_display = "Yes" if pa_well is True else "No" if pa_well is False else "Not stated"
+    lines.append(f"PA — Seller knows of wells: {well_display}")
     pa_ssts = ws.get("pa_ssts_on_property")
-    if pa_ssts:
-        lines.append(f"PA — SSTS on property: {pa_ssts}")
+    ssts_display = "Yes" if pa_ssts is True else "No" if pa_ssts is False else "Not stated"
+    lines.append(f"PA — SSTS on property: {ssts_display}")
     disc_well = ws.get("disclosure_well_info")
     if disc_well:
         lines.append(f"Disclosure — Well: {disc_well}")
@@ -489,14 +486,11 @@ def generate_html_summary(data: dict, filename: str = "") -> str:
     html += "<h2>Well / Septic</h2><table>"
     ws = data.get("well_septic", {})
     pa_well = ws.get("pa_well_known")
-    if pa_well:
-        html += f"<tr><td>PA — Seller knows of wells</td><td>{pa_well}</td></tr>"
-    pa_well_on = ws.get("pa_well_on_property")
-    if pa_well_on:
-        html += f"<tr><td>PA — Well on property</td><td>{pa_well_on}</td></tr>"
+    well_display = "Yes" if pa_well is True else "No" if pa_well is False else "Not stated"
+    html += f"<tr><td>PA — Seller knows of wells</td><td>{well_display}</td></tr>"
     pa_ssts = ws.get("pa_ssts_on_property")
-    if pa_ssts:
-        html += f"<tr><td>PA — SSTS on property</td><td>{pa_ssts}</td></tr>"
+    ssts_display = "Yes" if pa_ssts is True else "No" if pa_ssts is False else "Not stated"
+    html += f"<tr><td>PA — SSTS on property</td><td>{ssts_display}</td></tr>"
     disc_well = ws.get("disclosure_well_info")
     if disc_well:
         html += f"<tr><td>Disclosure — Well</td><td>{disc_well}</td></tr>"

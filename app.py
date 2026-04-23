@@ -568,18 +568,17 @@ with tab_wellseptic:
     ws = data.get("well_septic", {})
     
     st.subheader("From Purchase Agreement")
-    col1, col2 = st.columns(2)
-    col1.text_input(
+    pa_well = ws.get("pa_well_known")
+    well_display = "Yes" if pa_well is True else "No" if pa_well is False else "Not stated"
+    st.text_input(
         f"Seller knows of wells{line_label('pa_well_known')}", 
-        value=ws.get("pa_well_known", "") or "Not stated", key="pa_well_known"
+        value=well_display, key="pa_well_known"
     )
-    col2.text_input(
-        f"Well on property{line_label('pa_well_on_property')}", 
-        value=ws.get("pa_well_on_property", "") or "Not stated", key="pa_well_on_property"
-    )
+    pa_ssts = ws.get("pa_ssts_on_property")
+    ssts_display = "Yes" if pa_ssts is True else "No" if pa_ssts is False else "Not stated"
     st.text_input(
         f"SSTS on property{line_label('pa_ssts_on_property')}", 
-        value=ws.get("pa_ssts_on_property", "") or "Not stated", key="pa_ssts"
+        value=ssts_display, key="pa_ssts"
     )
     pa_notes = ws.get("pa_well_septic_notes")
     if pa_notes:

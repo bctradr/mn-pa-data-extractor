@@ -79,7 +79,6 @@ electronic signature (AuthentiSign, DocuSign, DotLoop, etc.).
 WELL AND SEPTIC: Extract detailed information from BOTH the PA (typically lines 369-384) 
 AND the Seller's Property Disclosure Statement (if present). For the PA, look at:
 - Line ~371: whether seller knows of any wells on the property
-- Line ~373: whether there is a well on the property  
 - Line ~377: whether there is a subsurface sewage treatment system (SSTS)
 For the Disclosure Statement, look for Section D or equivalent well/septic sections.
 Record what each source says. If there is a discrepancy between the PA and the Disclosure 
@@ -167,7 +166,6 @@ Include all other addenda, counteroffers, CIC/condo addenda, disclosure statemen
   },
   "well_septic": {
     "pa_well_known": null,
-    "pa_well_on_property": null,
     "pa_ssts_on_property": null,
     "pa_well_septic_notes": null,
     "disclosure_well_info": null,
@@ -222,7 +220,6 @@ Include all other addenda, counteroffers, CIC/condo addenda, disclosure statemen
       "buyers": null,
       "sellers": null,
       "pa_well_known": null,
-      "pa_well_on_property": null,
       "pa_ssts_on_property": null,
       "home_warranty": null,
       "other_terms": null,
