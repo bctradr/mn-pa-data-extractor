@@ -47,10 +47,26 @@ def get_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
-def extract_from_pdf(pdf_bytes: bytes) -> dict:
-    """Send PDF to Claude and return parsed JSON."""
+def extract_from_pdf(pdf_files: list) -> dict:
+    """Send one or more PDFs to Claude and return parsed JSON."""
     client = get_client()
-    pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+
+    # Build document blocks for each PDF
+    content = []
+    for pdf_bytes, filename in pdf_files:
+        pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+        content.append({
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": pdf_b64,
+            },
+        })
+    content.append({
+        "type": "text",
+        "text": "Extract all fields from this Minnesota purchase agreement. All uploaded documents are part of the same transaction. Return only JSON.",
+    })
 
     response = client.messages.create(
         model=MODEL,
@@ -60,20 +76,7 @@ def extract_from_pdf(pdf_bytes: bytes) -> dict:
         messages=[
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Extract all fields from this Minnesota purchase agreement. Return only JSON.",
-                    },
-                ],
+                "content": content,
             }
         ],
     )
@@ -209,18 +212,20 @@ with st.sidebar:
     uploaded_file = st.file_uploader(
         "Purchase Agreement (PDF)",
         type=["pdf"],
-        help="Standard MN residential purchase agreement with any addenda",
+        accept_multiple_files=True,
+        help="Upload one or more PDFs — all docs from the same transaction",
     )
 
     if uploaded_file:
-        st.success(f"Loaded: {uploaded_file.name}")
-        st.caption(f"{uploaded_file.size / 1024:.0f} KB")
+        st.success(f"Loaded {len(uploaded_file)} file(s)")
+        for f in uploaded_file:
+            st.caption(f"• {f.name} ({f.size / 1024:.0f} KB)")
 
     st.divider()
     st.caption("v0.2 — Uses Claude API for extraction")
 
 # ── Main area ─────────────────────────────────────────
-if uploaded_file is None:
+if not uploaded_file:
     st.info("👈 Upload a purchase agreement PDF to get started.")
     st.stop()
 
@@ -228,9 +233,10 @@ if uploaded_file is None:
 if st.button("🔍 Extract Fields", type="primary", use_container_width=True):
     with st.spinner("Reading agreement and extracting fields..."):
         try:
-            result = extract_from_pdf(uploaded_file.read())
+            pdf_files = [(f.read(), f.name) for f in uploaded_file]
+            result = extract_from_pdf(pdf_files)
             st.session_state["extraction"] = result
-            st.session_state["filename"] = uploaded_file.name
+            st.session_state["filename"] = uploaded_file[0].name
         except json.JSONDecodeError as e:
             st.error(f"Claude returned invalid JSON. Try re-uploading. Error: {e}")
             st.stop()
