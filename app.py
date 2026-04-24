@@ -35,6 +35,75 @@ st.set_page_config(
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 
+# ── Custom theme CSS ─────────────────────────────────
+st.markdown("""
+<style>
+    /* Header bar */
+    header[data-testid="stHeader"] {
+        background-color: #1a4e7a;
+    }
+    
+    /* Main title */
+    h1 {
+        color: #1a4e7a !important;
+    }
+    
+    /* Tab styling */
+    button[data-baseweb="tab"] {
+        color: #1a4e7a !important;
+        font-weight: 500;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #1a4e7a !important;
+        border-bottom-color: #1a4e7a !important;
+    }
+    
+    /* Subheaders */
+    h2, h3 {
+        color: #2a6496 !important;
+    }
+    
+    /* Primary button */
+    button[kind="primary"], .stButton > button[kind="primary"] {
+        background-color: #1a4e7a !important;
+        border-color: #1a4e7a !important;
+    }
+    
+    /* Info box */
+    div[data-testid="stAlert"] {
+        border-left-color: #1a4e7a;
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: #e8f0f8;
+    }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2 {
+        color: #1a4e7a !important;
+    }
+    
+    /* Dynamic text area - auto height */
+    .dynamic-text {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    .dynamic-text-label {
+        font-size: 14px;
+        color: #555;
+        margin-bottom: 2px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 # ══════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -119,6 +188,24 @@ def parse_currency(text: str) -> float:
         return float(cleaned)
     except ValueError:
         return 0.0
+
+
+def dynamic_text(label: str, value: str, key: str = None):
+    """Display text in an auto-sized box — no scrolling needed."""
+    if not value:
+        return
+    st.markdown(f'<div class="dynamic-text-label">{label}</div>'
+                f'<div class="dynamic-text">{value}</div>', 
+                unsafe_allow_html=True)
+
+
+def auto_height(text: str, min_height: int = 68, chars_per_line: int = 80) -> int:
+    """Calculate text_area height based on content length."""
+    if not text:
+        return min_height
+    lines = text.count('\n') + 1
+    wrapped_lines = max(lines, len(text) // chars_per_line + 1)
+    return max(min_height, wrapped_lines * 24 + 44)
 
 
 def flatten_for_csv(data: dict) -> dict:
@@ -363,9 +450,10 @@ with tab_property:
     )
     show_flags("property.county")
     show_flags("property.pid")
+    legal = prop.get("legal_description", "")
     prop["legal_description"] = st.text_area(
         f"Legal Description from PA{line_label('legal_description')}", 
-        value=prop.get("legal_description", ""), height=100
+        value=legal, height=auto_height(legal)
     )
     show_flags("property.legal_description")
 
@@ -555,7 +643,7 @@ with tab_contingencies:
     if other_terms:
         st.text_area(
             f"Other{line_label('other_terms')}", 
-            value=other_terms, height=80, key="other_terms"
+            value=other_terms, height=auto_height(other_terms), key="other_terms"
         )
     else:
         st.caption("No other terms found.")
@@ -574,30 +662,31 @@ with tab_wellseptic:
     ws = data.get("well_septic", {})
     
     st.subheader("From Purchase Agreement")
+    col1, col2 = st.columns(2)
     pa_well = ws.get("pa_well_known")
     well_display = "Yes" if pa_well is True else "No" if pa_well is False else "Not stated"
-    st.text_input(
+    col1.text_input(
         f"Seller knows of wells{line_label('pa_well_known')}", 
         value=well_display, key="pa_well_known"
     )
     pa_ssts = ws.get("pa_ssts_on_property")
     ssts_display = "Yes" if pa_ssts is True else "No" if pa_ssts is False else "Not stated"
-    st.text_input(
+    col2.text_input(
         f"SSTS on property{line_label('pa_ssts_on_property')}", 
         value=ssts_display, key="pa_ssts"
     )
     pa_notes = ws.get("pa_well_septic_notes")
     if pa_notes:
-        st.text_area("PA Notes", value=pa_notes, height=60, key="pa_ws_notes")
+        dynamic_text("PA Notes", pa_notes)
     
     st.subheader("From Disclosure Statement")
     disc_well = ws.get("disclosure_well_info")
     disc_ssts = ws.get("disclosure_ssts_info")
     if disc_well or disc_ssts:
         if disc_well:
-            st.text_input("Disclosure — Well", value=disc_well, key="disc_well")
+            dynamic_text("Disclosure — Well", disc_well)
         if disc_ssts:
-            st.text_input("Disclosure — SSTS", value=disc_ssts, key="disc_ssts")
+            dynamic_text("Disclosure — SSTS", disc_ssts)
     else:
         st.caption("No well/septic info found in Disclosure Statement.")
     
