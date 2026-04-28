@@ -170,7 +170,7 @@ INTAKE_LABELS = [
     ("Underwriter Code", "underwriter_code"),
     ("Office", "office"),
     ("Assistant & Main Contact", "assistant_main_contact"),
-    ("Business Dev. Contact Other Agent", "business_dev_contact_other_agent"),
+    ("Sales Team to Contact Other Agent", "business_dev_contact_other_agent"),
     ("Additional Notes", "additional_notes"),
 ]
 

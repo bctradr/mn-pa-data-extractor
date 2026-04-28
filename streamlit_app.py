@@ -21,22 +21,22 @@ st.set_page_config(
 # ── Theme CSS shared across all pages ────────────────
 st.markdown("""
 <style>
-    header[data-testid="stHeader"] { background-color: #1a4e7a; }
-    h1 { color: #1a4e7a !important; }
-    h2, h3 { color: #2a6496 !important; }
+    header[data-testid="stHeader"] { background-color: #0f3a5f; }
+    h1 { color: #0f3a5f !important; }
+    h2, h3 { color: #1a4e7a !important; }
     button[data-baseweb="tab"] { color: #1a4e7a !important; font-weight: 500; }
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #1a4e7a !important;
-        border-bottom-color: #1a4e7a !important;
+        color: #0f3a5f !important;
+        border-bottom-color: #0f3a5f !important;
     }
     button[kind="primary"], .stButton > button[kind="primary"] {
-        background-color: #1a4e7a !important;
-        border-color: #1a4e7a !important;
+        background-color: #0f3a5f !important;
+        border-color: #0f3a5f !important;
     }
-    div[data-testid="stAlert"] { border-left-color: #1a4e7a; }
-    section[data-testid="stSidebar"] { background-color: #e8f0f8; }
+    div[data-testid="stAlert"] { border-left-color: #0f3a5f; }
+    section[data-testid="stSidebar"] { background-color: #dde8f4; }
     section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2 { color: #1a4e7a !important; }
+    section[data-testid="stSidebar"] h2 { color: #0f3a5f !important; }
 </style>
 """, unsafe_allow_html=True)
 
