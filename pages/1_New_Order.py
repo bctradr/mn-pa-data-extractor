@@ -108,7 +108,7 @@ with col6:
         key=f"no_assistant_{rekey}",
     )
 
-notes = st.text_area("Additional Notes *", height=80, key="no_notes")
+notes = st.text_area("Additional Notes", height=80, key="no_notes")
 
 st.divider()
 
@@ -134,8 +134,6 @@ if save_clicked:
         errors.append("Closer is required.")
     if not assistant:
         errors.append("Assistant & Main Contact is required.")
-    if not notes:
-        errors.append("Additional Notes are required.")
 
     if errors:
         for e in errors:
