@@ -49,16 +49,16 @@ with col1:
         key="no_order_type",
     )
     client_name = st.text_input("Client Name (Referrer) *", key="no_client_name")
-    lender = st.text_input("Lender *", key="no_lender")
-    plat = st.selectbox("Plat & Assessments *", options=["", "Yes", "No"], key="no_plat")
+    lender = st.text_input("Lender", key="no_lender")
+    sales_team_contact = st.selectbox(
+        "Sales Team to Contact Other Agent *",
+        options=["", "Yes", "No"],
+        key="no_sales_team_contact",
+    )
 with col2:
     client_broker = st.text_input("Client Broker", key="no_client_broker")
-    mortgage_broker = st.text_input("Mortgage Broker *", key="no_mortgage_broker")
-    bd_contact = st.selectbox(
-        "Business Dev. Contact Other Agent *",
-        options=["", "Yes", "No"],
-        key="no_bd_contact",
-    )
+    mortgage_broker = st.text_input("Mortgage Broker", key="no_mortgage_broker")
+    plat = st.selectbox("Plat & Assessments *", options=["", "Yes", "No"], key="no_plat")
 
 
 # ── Closer-driven assignment ─────────────────────────
@@ -126,14 +126,10 @@ if save_clicked:
         errors.append("Order Type is required.")
     if not client_name:
         errors.append("Client Name (Referrer) is required.")
-    if not lender:
-        errors.append("Lender is required.")
-    if not mortgage_broker:
-        errors.append("Mortgage Broker is required.")
     if not plat:
         errors.append("Plat & Assessments is required.")
-    if not bd_contact:
-        errors.append("Business Dev. Contact Other Agent is required.")
+    if not sales_team_contact:
+        errors.append("Sales Team to Contact Other Agent is required.")
     if not closer:
         errors.append("Closer is required.")
     if not assistant:
@@ -158,7 +154,7 @@ if save_clicked:
                     "underwriter_code": uw_code,
                     "office": office,
                     "assistant_main_contact": assistant,
-                    "business_dev_contact_other_agent": bd_contact,
+                    "business_dev_contact_other_agent": sales_team_contact,
                     "additional_notes": notes,
                 }
                 files = [(f.name, f.read()) for f in uploaded]

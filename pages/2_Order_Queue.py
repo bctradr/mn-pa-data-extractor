@@ -85,7 +85,7 @@ def _render_order_detail(order: dict):
         st.markdown(f"- **Underwriter Code:** {order.get('underwriter_code') or '—'}")
         st.markdown(f"- **Office:** {order.get('office') or '—'}")
         st.markdown(f"- **Assistant & Main Contact:** {order.get('assistant_main_contact') or '—'}")
-        st.markdown(f"- **Business Dev. Contact Other Agent:** {order.get('business_dev_contact_other_agent') or '—'}")
+        st.markdown(f"- **Sales Team to Contact Other Agent:** {order.get('business_dev_contact_other_agent') or '—'}")
 
     notes = order.get("additional_notes")
     if notes:
