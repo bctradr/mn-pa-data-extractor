@@ -69,13 +69,6 @@ def _format_compact_time(s: str) -> str:
         return s[:16]
 
 
-def _truncate_notes(s: str, n: int = 30) -> str:
-    if not s:
-        return ""
-    s = s.strip()
-    return s if len(s) <= n else s[: n - 1] + "…"
-
-
 # ══════════════════════════════════════════════════════
 # LOAD ORDERS
 # ══════════════════════════════════════════════════════
@@ -113,8 +106,7 @@ for o in orders:
 rows = []
 for o in orders:
     docs = docs_by_order.get(o["id"], [])
-    docs_str = ", ".join(d["filename"] for d in docs) if docs else "—"
-    status_label = "🟢 Extracted" if o.get("status") == "extracted" else "🔵 New"
+    status_label = "🟢 Submitted" if o.get("status") == "extracted" else "🔵 New"
     rows.append({
         "Date/Time": _format_compact_time(o.get("created_at", "")),
         "Type": o.get("order_type") or "",
@@ -128,8 +120,6 @@ for o in orders:
         "UW": o.get("underwriter_code") or "",
         "Office": o.get("office") or "",
         "Contact OTA": o.get("business_dev_contact_other_agent") or "",
-        "Notes": _truncate_notes(o.get("additional_notes") or ""),
-        "Docs": docs_str,
         "Status": status_label,
     })
 
@@ -140,7 +130,21 @@ df = pd.DataFrame(rows)
 # DISPLAY TABLE WITH ROW SELECTION
 # ══════════════════════════════════════════════════════
 
-st.caption(f"{len(orders)} order(s) — newest first. Hover any cell to see full content.")
+st.caption(f"{len(orders)} order(s) — newest first. Click a column header to sort. Full notes and docs appear below.")
+
+# CSS to hide the column-header three-dot menu (sort still works via click).
+st.markdown("""
+<style>
+    /* Hide the three-dot menu icon in dataframe column headers */
+    div[data-testid="stDataFrame"] [data-testid="stDataFrameHeaderCellMenu"] {
+        display: none !important;
+    }
+    /* Some Streamlit versions use this class instead */
+    div[data-testid="stDataFrame"] button[aria-label*="menu"] {
+        display: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 selection = st.dataframe(
     df,
@@ -152,14 +156,6 @@ selection = st.dataframe(
         "Date/Time": st.column_config.TextColumn(width="small"),
         "Type": st.column_config.TextColumn(width="medium"),
         "Client": st.column_config.TextColumn(width="medium"),
-        "Notes": st.column_config.TextColumn(
-            width="small",
-            help="Hover to see full notes",
-        ),
-        "Docs": st.column_config.TextColumn(
-            width="small",
-            help="Hover to see all uploaded filenames",
-        ),
     },
 )
 

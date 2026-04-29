@@ -1,7 +1,7 @@
 """
 1_New_Order.py
 ══════════════
-Open New Order page — upload PDFs, fill in intake fields, save to queue.
+Open New Order page — upload docs, fill in intake fields, save to queue.
 """
 
 import streamlit as st
@@ -15,33 +15,57 @@ from supabase_client import create_order
 try:
     st.set_page_config(page_title="New Order", page_icon="📝", layout="wide")
 except Exception:
-    # set_page_config can only run once per session; ignore on subsequent navigations.
     pass
 
 
-st.title("📝 Open New Order")
-st.caption("Upload documents and enter order details. The order will appear in the **Order Queue** for extraction.")
+# Tighten top spacing and shrink the page title so the form sits high on screen.
+st.markdown("""
+<style>
+    /* Pull main block up — Streamlit's default top padding is generous */
+    .block-container { padding-top: 1.5rem !important; }
+    /* Smaller page title */
+    .new-order-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #0f3a5f;
+        margin: 0 0 0.25rem 0;
+    }
+    .new-order-caption {
+        font-size: 0.85rem;
+        color: #555;
+        margin-bottom: 0.75rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="new-order-title">📝 Open New Order</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="new-order-caption">Upload documents and enter order details — '
+    'order will appear in the Order Queue.</div>',
+    unsafe_allow_html=True,
+)
 
 
 # ── File uploader ────────────────────────────────────
-st.markdown("**Documents**")
 uploaded = st.file_uploader(
-    "Drag and drop PDFs here",
-    type=["pdf"],
+    "Drag and drop new order docs and emails here",
+    type=["pdf", "docx", "msg", "eml"],
     accept_multiple_files=True,
-    help="PA, addenda, seller's disclosure — extraction figures out which is which",
+    help="PDF, Word docs, or Outlook .msg / .eml emails. Extraction figures out which is which.",
     key="no_uploader",
 )
 if uploaded:
     st.success(f"Loaded {len(uploaded)} file(s)")
-    for f in uploaded:
-        st.caption(f"• {f.name} ({f.size / 1024:.0f} KB)")
+    cols = st.columns(3)
+    for i, f in enumerate(uploaded):
+        cols[i % 3].caption(f"• {f.name} ({f.size / 1024:.0f} KB)")
 
-st.divider()
+
+st.markdown("")  # tiny spacer
 
 
-# ── Order details ────────────────────────────────────
-col1, col2 = st.columns(2)
+# ── Order details — 3 columns ───────────────────────
+col1, col2, col3 = st.columns(3)
 with col1:
     order_type = st.selectbox(
         "Order Type *",
@@ -59,13 +83,6 @@ with col2:
     client_broker = st.text_input("Client Broker", key="no_client_broker")
     mortgage_broker = st.text_input("Mortgage Broker", key="no_mortgage_broker")
     plat = st.selectbox("Plat & Assessments *", options=["", "Yes", "No"], key="no_plat")
-
-
-# ── Closer-driven assignment ─────────────────────────
-st.markdown("**Closer-driven assignment**")
-st.caption("Underwriter, office, and assistant auto-fill when you pick a closer. All three are editable.")
-
-col3, col4 = st.columns(2)
 with col3:
     closer = st.selectbox(
         "Closer *",
@@ -73,12 +90,11 @@ with col3:
         key="no_closer",
     )
 
-# Compute defaults from closer + order_type. Widget keys include closer/order_type
-# so the values reset to fresh defaults on change.
-defaults = get_assignment(closer, order_type)
-rekey = f"{closer}__{order_type}"
+    # Auto-fill defaults from closer + order_type. Widget keys include closer/order_type
+    # so the values reset to fresh defaults when either changes.
+    defaults = get_assignment(closer, order_type)
+    rekey = f"{closer}__{order_type}"
 
-with col4:
     uw_code = st.text_input(
         "Underwriter Code",
         value=defaults["underwriter_code"],
@@ -86,8 +102,6 @@ with col4:
         key=f"no_uw_{rekey}",
     )
 
-col5, col6 = st.columns(2)
-with col5:
     office_options = [""] + OFFICES
     try:
         office_idx = office_options.index(defaults["office"]) if defaults["office"] else 0
@@ -100,7 +114,6 @@ with col5:
         help="Auto-filled from closer · editable",
         key=f"no_office_{rekey}",
     )
-with col6:
     assistant = st.text_input(
         "Assistant & Main Contact *",
         value=defaults["assistant"],
@@ -108,20 +121,19 @@ with col6:
         key=f"no_assistant_{rekey}",
     )
 
-notes = st.text_area("Additional Notes", height=80, key="no_notes")
 
-st.divider()
+notes = st.text_area("Additional Notes", height=68, key="no_notes")
 
 
 # ── Save ─────────────────────────────────────────────
-col_save_l, col_save_r = st.columns([3, 1])
+col_save_l, col_save_r = st.columns([4, 1])
 with col_save_r:
     save_clicked = st.button("💾 Save Order", type="primary", use_container_width=True)
 
 if save_clicked:
     errors = []
     if not uploaded:
-        errors.append("At least one PDF must be uploaded.")
+        errors.append("At least one document must be uploaded.")
     if not order_type:
         errors.append("Order Type is required.")
     if not client_name:
