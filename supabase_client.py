@@ -84,14 +84,22 @@ def download_documents(order_id: str) -> list:
 
 
 def update_extraction(order_id: str, extracted_data: dict, flags: list):
-    """Save extraction results back to the order row and mark status='extracted'."""
+    """Save extraction results back to the order row WITHOUT changing status.
+    
+    Status transitions are handled separately via set_order_status().
+    """
     sb = get_supabase()
     sb.table("orders").update({
         "extracted_data": extracted_data,
         "extraction_flags": flags,
         "extracted_at": datetime.now(timezone.utc).isoformat(),
-        "status": "extracted",
     }).eq("id", order_id).execute()
+
+
+def set_order_status(order_id: str, status: str):
+    """Update just the status field. Valid values: 'new', 'in_review', 'submitted'."""
+    sb = get_supabase()
+    sb.table("orders").update({"status": status}).eq("id", order_id).execute()
 
 
 def delete_order(order_id: str):
