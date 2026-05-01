@@ -20,6 +20,19 @@ from io import BytesIO
 # ── Import the extraction prompt ──────────────────────
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
+import zipfile
+
+# Order-context imports — only used when launched from the Order Queue
+try:
+    from supabase_client import set_order_status, update_extraction
+    from extractor import (
+        flatten_combined_for_csv,
+        intake_summary_text,
+        intake_summary_html,
+    )
+    _ORDER_CONTEXT_AVAILABLE = True
+except Exception:
+    _ORDER_CONTEXT_AVAILABLE = False
 
 
 # ══════════════════════════════════════════════════════
@@ -224,43 +237,107 @@ def flatten_for_csv(data: dict) -> dict:
 st.title("🏠 MN Purchase Agreement Extractor")
 st.caption("Upload a Minnesota purchase agreement PDF → review extracted fields → export for title production")
 
+# ── Detect order-review context ──────────────────────
+review_order = st.session_state.get("review_order")
+review_order_id = st.session_state.get("review_order_id")
+review_files = st.session_state.get("review_files")  # [(bytes, filename), ...]
+in_review_mode = bool(review_order and review_files and _ORDER_CONTEXT_AVAILABLE)
+
+if in_review_mode:
+    # Banner showing which order is being reviewed
+    st.success(
+        f"📂 **Review mode** — Order for "
+        f"**{review_order.get('client_name_referrer') or '—'}** · "
+        f"{review_order.get('transaction_type') or '—'} / "
+        f"{review_order.get('order_type') or '—'} · "
+        f"State {review_order.get('property_state') or '—'} · "
+        f"Closer {review_order.get('closer') or '—'}"
+        + (f" · 🏗️ New Construction" if review_order.get("is_new_construction") else "")
+    )
+    if review_order.get("template_name"):
+        st.caption(f"📄 Template: **{review_order['template_name']}**")
+
+    cexit, _ = st.columns([1, 5])
+    with cexit:
+        if st.button("⬅️ Back to Queue (exit review mode)"):
+            for k in ("review_order", "review_order_id", "review_files",
+                      "extraction", "filename"):
+                st.session_state.pop(k, None)
+            st.switch_page("pages/2_Order_Queue.py")
+
+
 # ── Sidebar: Upload ──────────────────────────────────
 with st.sidebar:
     st.header("Upload")
-    uploaded_file = st.file_uploader(
-        "Purchase Agreement (PDF)",
-        type=["pdf"],
-        accept_multiple_files=True,
-        help="Upload one or more PDFs — all docs from the same transaction",
-    )
+    if in_review_mode:
+        st.info(f"📂 Reviewing order — {len(review_files)} file(s) loaded from queue.")
+        for fbytes, fname in review_files:
+            st.caption(f"• {fname} ({len(fbytes) / 1024:.0f} KB)")
+        st.caption("Upload widget disabled in review mode. Use **Back to Queue** to exit.")
+        uploaded_file = None
+    else:
+        uploaded_file = st.file_uploader(
+            "Purchase Agreement (PDF)",
+            type=["pdf"],
+            accept_multiple_files=True,
+            help="Upload one or more PDFs — all docs from the same transaction",
+        )
 
-    if uploaded_file:
-        st.success(f"Loaded {len(uploaded_file)} file(s)")
-        for f in uploaded_file:
-            st.caption(f"• {f.name} ({f.size / 1024:.0f} KB)")
+        if uploaded_file:
+            st.success(f"Loaded {len(uploaded_file)} file(s)")
+            for f in uploaded_file:
+                st.caption(f"• {f.name} ({f.size / 1024:.0f} KB)")
 
     st.divider()
     st.caption("v0.2 — Uses Claude API for extraction")
 
 # ── Main area ─────────────────────────────────────────
-if not uploaded_file:
-    st.info("👈 Upload a purchase agreement PDF to get started.")
-    st.stop()
+if in_review_mode:
+    # Auto-extract if not already done for this order
+    if "extraction" not in st.session_state:
+        with st.spinner("Reading agreement and extracting fields..."):
+            try:
+                pdf_files = [(b, fname) for (b, fname) in review_files]
+                result = extract_from_pdf(pdf_files)
+                st.session_state["extraction"] = result
+                st.session_state["filename"] = review_files[0][1]
+            except json.JSONDecodeError as e:
+                st.error(f"Claude returned invalid JSON. Try Re-extract. Error: {e}")
+                st.stop()
+            except Exception as e:
+                st.error(f"Extraction failed: {e}")
+                st.stop()
 
-# Extract button
-if st.button("🔍 Extract Fields", type="primary", use_container_width=True):
-    with st.spinner("Reading agreement and extracting fields..."):
-        try:
-            pdf_files = [(f.read(), f.name) for f in uploaded_file]
-            result = extract_from_pdf(pdf_files)
-            st.session_state["extraction"] = result
-            st.session_state["filename"] = uploaded_file[0].name
-        except json.JSONDecodeError as e:
-            st.error(f"Claude returned invalid JSON. Try re-uploading. Error: {e}")
-            st.stop()
-        except Exception as e:
-            st.error(f"Extraction failed: {e}")
-            st.stop()
+    # Re-extract button always available in review mode
+    if st.button("🔁 Re-run extraction", help="Re-extract from the loaded PDFs"):
+        with st.spinner("Re-running extraction..."):
+            try:
+                pdf_files = [(b, fname) for (b, fname) in review_files]
+                result = extract_from_pdf(pdf_files)
+                st.session_state["extraction"] = result
+                st.rerun()
+            except Exception as e:
+                st.error(f"Re-extraction failed: {e}")
+
+else:
+    # Standalone mode (current behavior, unchanged)
+    if not uploaded_file:
+        st.info("👈 Upload a purchase agreement PDF to get started.")
+        st.stop()
+
+    if st.button("🔍 Extract Fields", type="primary", use_container_width=True):
+        with st.spinner("Reading agreement and extracting fields..."):
+            try:
+                pdf_files = [(f.read(), f.name) for f in uploaded_file]
+                result = extract_from_pdf(pdf_files)
+                st.session_state["extraction"] = result
+                st.session_state["filename"] = uploaded_file[0].name
+            except json.JSONDecodeError as e:
+                st.error(f"Claude returned invalid JSON. Try re-uploading. Error: {e}")
+                st.stop()
+            except Exception as e:
+                st.error(f"Extraction failed: {e}")
+                st.stop()
 
 # Show results if we have them
 if "extraction" not in st.session_state:
@@ -670,62 +747,148 @@ with tab_json:
 
 # ── Export ────────────────────────────────────────────
 st.divider()
-st.subheader("Export")
 
 fname = st.session_state.get("filename", "output")
 
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    # Text summary — best for pasting into TPS notes
-    text_summary = generate_text_summary(data, fname)
-    st.download_button(
-        "📋 Summary (Text)",
-        data=text_summary.encode("utf-8"),
-        file_name=f"summary_{fname}.txt",
-        mime="text/plain",
-        use_container_width=True,
-        help="Plain text — paste directly into TPS notes",
+if in_review_mode:
+    # ── Review Mode: Publish CSV (zip) + status flip ──
+    st.subheader("📤 Publish")
+    st.caption(
+        "Once you've reviewed the extracted fields above for accuracy, click "
+        "**Publish CSV**. This downloads a zip containing the CSV (intake + "
+        "extracted fields) and all original documents, marks the order as "
+        "**Submitted**, and saves the extraction back to the order record."
     )
 
-with col2:
-    # HTML summary — formatted, printable
-    html_summary = generate_html_summary(data, fname)
-    st.download_button(
-        "🌐 Summary (HTML)",
-        data=html_summary.encode("utf-8"),
-        file_name=f"summary_{fname}.html",
-        mime="text/html",
-        use_container_width=True,
-        help="Formatted summary — open in browser or print",
-    )
+    # Build the unified CSV (intake + extracted)
+    intake = {
+        "transaction_type": review_order.get("transaction_type"),
+        "order_type": review_order.get("order_type"),
+        "property_state": review_order.get("property_state"),
+        "is_new_construction": review_order.get("is_new_construction"),
+        "template_name": review_order.get("template_name"),
+        "client_name_referrer": review_order.get("client_name_referrer"),
+        "client_broker": review_order.get("client_broker"),
+        "lender": review_order.get("lender"),
+        "mortgage_broker": review_order.get("mortgage_broker"),
+        "plat_and_assessments": review_order.get("plat_and_assessments"),
+        "closer": review_order.get("closer"),
+        "underwriter_code": review_order.get("underwriter_code"),
+        "office": review_order.get("office"),
+        "assistant_main_contact": review_order.get("assistant_main_contact"),
+        "business_dev_contact_other_agent": review_order.get("business_dev_contact_other_agent"),
+        "additional_notes": review_order.get("additional_notes"),
+    }
+    flat = flatten_combined_for_csv(intake, data)
+    csv_bytes = pd.DataFrame([flat]).to_csv(index=False).encode("utf-8")
 
-with col3:
-    # CSV export (flattened single row)
-    flat = flatten_for_csv(data)
-    df = pd.DataFrame([flat])
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📥 Data (CSV)",
-        data=csv_bytes,
-        file_name=f"extraction_{fname}.csv",
-        mime="text/csv",
-        use_container_width=True,
-        help="Flat CSV — one row, all fields as columns",
-    )
+    # Build a text summary too (handy for TPS notes paste-in)
+    text_combined = (intake_summary_text(intake) + generate_text_summary(data, fname)).encode("utf-8")
 
-with col4:
-    # JSON export (full nested)
-    json_bytes = json.dumps(data, indent=2).encode("utf-8")
-    st.download_button(
-        "📥 Data (JSON)",
-        data=json_bytes,
-        file_name=f"extraction_{fname}.json",
-        mime="application/json",
-        use_container_width=True,
-        help="Full structured data — for integrations",
-    )
+    # Order identifier for filenames
+    short_id = (review_order_id or "order")[:8]
+    client_slug = (review_order.get("client_name_referrer") or "order").replace(" ", "_")
 
-# Preview the text summary inline for quick copy-paste
-with st.expander("📋 Preview Text Summary (click to copy)"):
-    st.code(text_summary, language=None)
+    # Build the zip in memory
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"order_{short_id}_data.csv", csv_bytes)
+        zf.writestr(f"order_{short_id}_summary.txt", text_combined)
+        for fbytes, fname_doc in review_files:
+            zf.writestr(f"documents/{fname_doc}", fbytes)
+    zip_bytes = zip_buf.getvalue()
+
+    cpub_l, cpub_r = st.columns([1, 1])
+    with cpub_l:
+        # Download triggers persistence + status flip via a callback
+        def _on_publish():
+            try:
+                ext_flags = data.get("extraction_metadata", {}).get("flags", [])
+                update_extraction(review_order_id, data, ext_flags)
+                set_order_status(review_order_id, "submitted")
+                st.session_state["just_published"] = True
+            except Exception as e:
+                st.session_state["publish_error"] = str(e)
+
+        st.download_button(
+            "📤 Publish CSV (zip with all docs)",
+            data=zip_bytes,
+            file_name=f"{client_slug}_{short_id}.zip",
+            mime="application/zip",
+            use_container_width=True,
+            type="primary",
+            on_click=_on_publish,
+        )
+
+    with cpub_r:
+        if st.session_state.get("just_published"):
+            st.success("✅ Published! Order marked as Submitted.")
+            if st.button("⬅️ Back to Queue"):
+                for k in ("review_order", "review_order_id", "review_files",
+                          "extraction", "filename", "just_published"):
+                    st.session_state.pop(k, None)
+                st.switch_page("pages/2_Order_Queue.py")
+        elif st.session_state.get("publish_error"):
+            st.error(f"Publish failed: {st.session_state['publish_error']}")
+            st.session_state.pop("publish_error", None)
+
+else:
+    # ── Standalone Mode: original 4-button export grid ──
+    st.subheader("Export")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        # Text summary — best for pasting into TPS notes
+        text_summary = generate_text_summary(data, fname)
+        st.download_button(
+            "📋 Summary (Text)",
+            data=text_summary.encode("utf-8"),
+            file_name=f"summary_{fname}.txt",
+            mime="text/plain",
+            use_container_width=True,
+            help="Plain text — paste directly into TPS notes",
+        )
+
+    with col2:
+        # HTML summary — formatted, printable
+        html_summary = generate_html_summary(data, fname)
+        st.download_button(
+            "🌐 Summary (HTML)",
+            data=html_summary.encode("utf-8"),
+            file_name=f"summary_{fname}.html",
+            mime="text/html",
+            use_container_width=True,
+            help="Formatted summary — open in browser or print",
+        )
+
+    with col3:
+        # CSV export (flattened single row)
+        flat = flatten_for_csv(data)
+        df = pd.DataFrame([flat])
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 Data (CSV)",
+            data=csv_bytes,
+            file_name=f"extraction_{fname}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Flat CSV — one row, all fields as columns",
+        )
+
+    with col4:
+        # JSON export (full nested)
+        json_bytes = json.dumps(data, indent=2).encode("utf-8")
+        st.download_button(
+            "📥 Data (JSON)",
+            data=json_bytes,
+            file_name=f"extraction_{fname}.json",
+            mime="application/json",
+            use_container_width=True,
+            help="Full structured data — for integrations",
+        )
+
+    # Preview the text summary inline for quick copy-paste
+    with st.expander("📋 Preview Text Summary (click to copy)"):
+        text_summary_preview = generate_text_summary(data, fname)
+        st.code(text_summary_preview, language=None)
