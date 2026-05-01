@@ -20,6 +20,7 @@ from io import BytesIO
 # ── Import the extraction prompt ──────────────────────
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
+from ui_theme import apply_theme
 import zipfile
 
 # Order-context imports — only used when launched from the Order Queue
@@ -43,6 +44,8 @@ try:
     st.set_page_config(page_title="PA Extractor", page_icon="📄", layout="wide")
 except Exception:
     pass
+
+apply_theme()
 
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096

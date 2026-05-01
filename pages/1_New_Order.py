@@ -4,8 +4,7 @@
 Open New Order page — upload docs, fill in intake fields, save to queue.
 
 Layout: SoftPro-style bordered sections with blue header bars.
-Uses Streamlit's native st.container(border=True) plus a small CSS
-override to color the borders and add header bars.
+Yes/No fields use horizontal radio buttons.
 """
 
 import streamlit as st
@@ -18,6 +17,7 @@ from transaction_categories import (
     get_template_name,
 )
 from supabase_client import create_order
+from ui_theme import apply_theme, section_header
 
 
 try:
@@ -25,17 +25,13 @@ try:
 except Exception:
     pass
 
+apply_theme()
 
-# ══════════════════════════════════════════════════════
-# STYLING — SoftPro-style sectioned layout
-# ══════════════════════════════════════════════════════
 
+# Page title styling (specific to this page — small, dark-blue, tight)
 st.markdown("""
 <style>
-    /* Tighten top spacing */
     .block-container { padding-top: 1.5rem !important; }
-
-    /* Page title */
     .new-order-title {
         font-size: 1.5rem;
         font-weight: 600;
@@ -47,39 +43,8 @@ st.markdown("""
         color: #555;
         margin-bottom: 0.5rem;
     }
-
-    /* SoftPro-style blue section header */
-    .softpro-section-header {
-        background: #0f3a5f;
-        color: white;
-        font-size: 0.85rem;
-        font-weight: 600;
-        padding: 6px 12px;
-        border-radius: 4px 4px 0 0;
-        margin-top: 0.6rem;
-        margin-bottom: -8px;  /* overlap with bordered container below */
-        position: relative;
-        z-index: 1;
-    }
-
-    /* Customize Streamlit's native border-container to match SoftPro */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-color: #c8d4e0 !important;
-        border-radius: 0 4px 4px 4px !important;
-        background: #fafcfe;
-    }
 </style>
 """, unsafe_allow_html=True)
-
-
-def section_header(title: str):
-    """Render a SoftPro-style blue header bar."""
-    st.markdown(f'<div class="softpro-section-header">{title}</div>', unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════
-# PAGE TITLE
-# ══════════════════════════════════════════════════════
 
 st.markdown('<div class="new-order-title">📝 Open New Order</div>', unsafe_allow_html=True)
 st.markdown(
@@ -165,13 +130,21 @@ with st.container(border=True):
     with info_col1:
         client_name = st.text_input("Client Name (Referrer) *", key="no_client_name")
         lender = st.text_input("Lender", key="no_lender")
-        plat = st.selectbox("Plat & Assessments *", options=["", "Yes", "No"], key="no_plat")
+        plat = st.radio(
+            "Plat & Assessments *",
+            options=["Yes", "No"],
+            horizontal=True,
+            index=None,
+            key="no_plat",
+        )
     with info_col2:
         client_broker = st.text_input("Client Broker", key="no_client_broker")
         mortgage_broker = st.text_input("Mortgage Broker", key="no_mortgage_broker")
-        sales_team_contact = st.selectbox(
+        sales_team_contact = st.radio(
             "Sales Team to Contact Other Agent *",
-            options=["", "Yes", "No"],
+            options=["Yes", "No"],
+            horizontal=True,
+            index=None,
             key="no_sales_team_contact",
         )
 

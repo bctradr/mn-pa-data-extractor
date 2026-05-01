@@ -22,12 +22,15 @@ from supabase_client import (
     set_order_status,
     delete_order,
 )
+from ui_theme import apply_theme
 
 
 try:
     st.set_page_config(page_title="Order Queue", page_icon="📋", layout="wide")
 except Exception:
     pass
+
+apply_theme()
 
 
 st.title("📋 Order Queue")
@@ -117,18 +120,6 @@ df = pd.DataFrame(rows)
 # ══════════════════════════════════════════════════════
 
 st.caption(f"{len(orders)} order(s) — newest first. Click a column header to sort.")
-
-# CSS to hide the column-header three-dot menu (sort still works via click).
-st.markdown("""
-<style>
-    div[data-testid="stDataFrame"] [data-testid="stDataFrameHeaderCellMenu"] {
-        display: none !important;
-    }
-    div[data-testid="stDataFrame"] button[aria-label*="menu"] {
-        display: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 selection = st.dataframe(
     df,
