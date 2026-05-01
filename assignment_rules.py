@@ -4,6 +4,9 @@ assignment_rules.py
 Closer-driven defaults for Underwriter Code, Office, and Assistant.
 """
 
+from transaction_categories import transaction_side
+
+
 # ── Dropdown lists ────────────────────────────────────
 
 CLOSERS = [
@@ -16,26 +19,6 @@ OFFICES = [
     "Lake Elmo", "Blaine", "Maple Grove", "Otsego",
     "Coon Rapids KW", "Coon Rapids Main", "Forest Lake",
     "Edina", "Ramsey",
-]
-
-ORDER_TYPES = [
-    "Purchase Loan-Buyer",
-    "Purchase Cash-Buyer",
-    "Seller Side Only",
-    "Dual Closing",
-    "Refinance - Primary Residence",
-    "Refinance - Not OOC",
-    "Refinance - Const. Loan",
-    "Refinance - TRAC Loan",
-    "Loan Modification",
-    "O & E Report",
-    "Recording Service Only",
-    "Short Sale",
-    "Title Insurance Only",
-    "Listing Pre-Check",
-    "Existing Owner OP Only",
-    "1031",
-    "Signing Only",
 ]
 
 UW_CODES = ["ST", "OR", "CT", "FA"]
@@ -69,13 +52,14 @@ _CONDITIONAL_DEFAULTS = {
 def _assistant_for_order_type(order_type: str) -> str:
     """Lisa/Marcy/Paula buyside-vs-sellside-vs-dual rule.
     
-    Ashley = buyside (default for everything that isn't sellside/dual).
+    Ashley = buyside default.
     Sandra = sellside.
-    "Ashley & Sandra" = dual closing (both assigned).
+    "Ashley & Sandra" = dual.
     """
-    if order_type == "Seller Side Only":
+    side = transaction_side(order_type)
+    if side == "sellside":
         return "Sandra"
-    if order_type == "Dual Closing":
+    if side == "dual":
         return "Ashley & Sandra"
     return "Ashley"
 

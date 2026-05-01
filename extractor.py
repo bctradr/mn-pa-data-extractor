@@ -145,7 +145,11 @@ def flatten_for_csv(data: dict) -> dict:
 # tab) to the extracted PA fields, for unified TPS-bound exports.
 
 INTAKE_FIELD_ORDER = [
+    "transaction_type",
     "order_type",
+    "property_state",
+    "is_new_construction",
+    "template_name",
     "client_name_referrer",
     "client_broker",
     "lender",
@@ -160,7 +164,11 @@ INTAKE_FIELD_ORDER = [
 ]
 
 INTAKE_LABELS = [
+    ("Transaction Type", "transaction_type"),
     ("Order Type", "order_type"),
+    ("Property State", "property_state"),
+    ("New Construction", "is_new_construction"),
+    ("Template Name", "template_name"),
     ("Client Name (Referrer)", "client_name_referrer"),
     ("Client Broker", "client_broker"),
     ("Lender", "lender"),
