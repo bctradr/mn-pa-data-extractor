@@ -22,7 +22,7 @@ from supabase_client import (
     set_order_status,
     delete_order,
 )
-from ui_theme import apply_theme
+from ui_theme import apply_theme, section_bar
 
 
 try:
@@ -119,7 +119,8 @@ df = pd.DataFrame(rows)
 # DISPLAY TABLE WITH ROW SELECTION
 # ══════════════════════════════════════════════════════
 
-st.caption(f"{len(orders)} order(s) — newest first. Click a column header to sort.")
+section_bar(f"Order Queue — {len(orders)} order(s) (newest first)")
+st.caption("Click a column header to sort · click a row to see actions below.")
 
 selection = st.dataframe(
     df,
