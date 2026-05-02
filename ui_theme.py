@@ -42,6 +42,19 @@ def apply_theme():
         z-index: 1;
     }
 
+    /* Variant for use above content that isn't a bordered container
+       (e.g., above a st.dataframe). No negative margin so the table
+       below isn't pulled up into the bar. */
+    .softpro-section-bar {
+        background: #0f3a5f;
+        color: white;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 8px 14px;
+        border-radius: 4px;
+        margin: 0.6rem 0 0.4rem 0;
+    }
+
     /* ── Form inputs — SoftPro-style boxes ────────────────── */
     /* Text inputs and number inputs */
     div[data-testid="stTextInput"] input,
@@ -110,18 +123,10 @@ def apply_theme():
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2 { color: #0f3a5f !important; }
 
-    /* ── Order Queue table — blue header row ──────────────── */
-    /* Targets the native st.dataframe header. Streamlit uses Glide
-       Data Grid internally — these selectors may need adjustment if
-       Streamlit upgrades. */
-    div[data-testid="stDataFrame"] [role="columnheader"] {
-        background-color: #0f3a5f !important;
-        color: white !important;
-        font-weight: 600 !important;
-    }
-    div[data-testid="stDataFrame"] [role="columnheader"] * {
-        color: white !important;
-    }
+    /* ── Order Queue table ────────────────────────────────── */
+    /* Note: st.dataframe headers are rendered to <canvas> by Glide Data
+       Grid, so they cannot be styled with CSS. The Order Queue page adds
+       a colored title bar ABOVE the table instead. */
     /* Hide the column-header three-dot menu (sort still works via click) */
     div[data-testid="stDataFrame"] [data-testid="stDataFrameHeaderCellMenu"] {
         display: none !important;
@@ -135,8 +140,17 @@ def apply_theme():
 
 def section_header(title: str):
     """Render a SoftPro-style blue header bar (use just before a 
-    st.container(border=True) block)."""
+    st.container(border=True) block — the bar visually attaches to it)."""
     st.markdown(
         f'<div class="softpro-section-header">{title}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def section_bar(title: str):
+    """Standalone blue section bar — for use above content that isn't
+    a bordered container (e.g., above a st.dataframe)."""
+    st.markdown(
+        f'<div class="softpro-section-bar">{title}</div>',
         unsafe_allow_html=True,
     )
