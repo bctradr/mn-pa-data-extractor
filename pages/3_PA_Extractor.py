@@ -20,7 +20,7 @@ from io import BytesIO
 # ── Import the extraction prompt ──────────────────────
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
-from ui_theme import apply_theme
+from ui_theme import apply_theme, section_header, section_bar
 import zipfile
 
 # Order-context imports — only used when launched from the Order Queue
@@ -375,13 +375,38 @@ def line_label(field_name: str) -> str:
 
 # ── Summary flag count at top ─────────────────────────
 if flags:
-    st.info(f"📋 {len(flags)} field(s) flagged — see notes below each field in the relevant tab.")
+    st.info(f"📋 {len(flags)} field(s) flagged — see notes below each field in the relevant section.")
 
-# ── Tabbed sections for review/editing ────────────────
-tab_parties, tab_property, tab_financial, tab_dates, tab_title, tab_contingencies, tab_wellseptic, tab_addenda, tab_json = st.tabs([
-    "Parties", "Property", "Financial", "Dates",
-    "Title/Closing", "Contingencies", "Well/Septic", "Addenda", "Raw JSON"
-])
+# ── Sectioned single-page review ───────────────────────
+# We use a small wrapper class so the existing `with tab_X:` blocks below
+# render as SoftPro-style section boxes instead of tabs. Each block emits a
+# blue header bar, then opens a bordered container, then closes it on exit.
+
+class _Section:
+    """Context manager that renders a SoftPro-style section header + bordered box."""
+    def __init__(self, title: str):
+        self.title = title
+        self._container = None
+
+    def __enter__(self):
+        section_header(self.title)
+        self._container = st.container(border=True)
+        self._cm = self._container.__enter__()
+        return self._cm
+
+    def __exit__(self, *args):
+        return self._container.__exit__(*args)
+
+# Map old tab names to new sections (with same semantics — "with tab_X:" still works)
+tab_parties       = _Section("Parties")
+tab_property      = _Section("Property")
+tab_financial     = _Section("Financial")
+tab_dates         = _Section("Dates")
+tab_title         = _Section("Title / Closing")
+tab_contingencies = _Section("Contingencies")
+tab_wellseptic    = _Section("Well / Septic / HOA")
+tab_addenda       = _Section("Addenda")
+tab_json          = _Section("Raw JSON (debug)")
 
 with tab_parties:
     st.subheader("Buyers")
@@ -745,7 +770,8 @@ with tab_addenda:
         st.info("No addenda detected.")
 
 with tab_json:
-    st.json(data)
+    with st.expander("Show raw JSON (for debugging only)", expanded=False):
+        st.json(data)
 
 
 # ── Export ────────────────────────────────────────────
@@ -801,26 +827,40 @@ if in_review_mode:
             zf.writestr(f"documents/{fname_doc}", fbytes)
     zip_bytes = zip_buf.getvalue()
 
-    cpub_l, cpub_r = st.columns([1, 1])
-    with cpub_l:
-        # Download triggers persistence + status flip via a callback
-        def _on_publish():
-            try:
-                ext_flags = data.get("extraction_metadata", {}).get("flags", [])
-                update_extraction(review_order_id, data, ext_flags)
-                set_order_status(review_order_id, "submitted")
-                st.session_state["just_published"] = True
-            except Exception as e:
-                st.session_state["publish_error"] = str(e)
+    cpub_l, cpub_m, cpub_r = st.columns([1, 1, 1])
 
+    # Single shared callback for both publish actions
+    def _on_publish():
+        try:
+            ext_flags = data.get("extraction_metadata", {}).get("flags", [])
+            update_extraction(review_order_id, data, ext_flags)
+            set_order_status(review_order_id, "submitted")
+            st.session_state["just_published"] = True
+        except Exception as e:
+            st.session_state["publish_error"] = str(e)
+
+    with cpub_l:
         st.download_button(
-            "📤 Publish CSV (zip with all docs)",
+            "📤 Publish CSV (zip with docs)",
             data=zip_bytes,
             file_name=f"{client_slug}_{short_id}.zip",
             mime="application/zip",
             use_container_width=True,
             type="primary",
             on_click=_on_publish,
+            key="publish_zip",
+        )
+
+    with cpub_m:
+        st.download_button(
+            "📤 Publish CSV (no docs)",
+            data=csv_bytes,
+            file_name=f"{client_slug}_{short_id}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            on_click=_on_publish,
+            key="publish_csv_only",
+            help="Downloads just the CSV. Order is still marked as Submitted.",
         )
 
     with cpub_r:
