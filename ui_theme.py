@@ -100,11 +100,38 @@ def apply_theme():
         border-radius: 3px !important;
     }
 
-    /* File uploader */
+    /* File uploader — bigger, more obvious drop zone with custom text.
+       Streamlit renders "Drag and drop file here" + size info internally;
+       we hide its small block and inject our own larger styled label. */
     div[data-testid="stFileUploader"] section {
         background-color: #f0f4f8 !important;
-        border: 1px dashed #c8d4e0 !important;
-        border-radius: 3px !important;
+        border: 2px dashed #1a4e7a !important;
+        border-radius: 6px !important;
+        padding: 24px !important;
+        min-height: 90px !important;
+        position: relative;
+    }
+    /* Hide Streamlit's default tiny label block */
+    div[data-testid="stFileUploader"] section > div:first-child {
+        visibility: hidden;
+        position: absolute;
+        height: 0;
+    }
+    /* Inject our larger custom label */
+    div[data-testid="stFileUploader"] section::before {
+        content: "📂 Drag and Drop Here  •  200MB per file  •  PDF, DOCX, MSG, EML";
+        display: block;
+        text-align: center;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #1a4e7a;
+        margin-bottom: 10px;
+    }
+    /* Center the Browse button below the label */
+    div[data-testid="stFileUploader"] section > button,
+    div[data-testid="stFileUploader"] section > [data-testid="stFileUploaderDropzone"] button {
+        margin: 0 auto;
+        display: block;
     }
 
     /* ── Buttons ──────────────────────────────────────────── */
