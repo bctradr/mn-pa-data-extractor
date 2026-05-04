@@ -48,7 +48,7 @@ st.markdown("""
 
 st.markdown('<div class="new-order-title">📝 Open New Order</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="new-order-caption">Upload documents and enter order details — '
+    '<div class="new-order-caption">Drag and drop the PA and supporting docs/emails below — '
     'order will appear in the Order Queue.</div>',
     unsafe_allow_html=True,
 )
