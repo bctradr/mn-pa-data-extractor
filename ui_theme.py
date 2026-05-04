@@ -20,6 +20,11 @@ def apply_theme():
     h1 { color: #0f3a5f !important; }
     h2, h3 { color: #1a4e7a !important; }
 
+    /* Tighten top padding app-wide */
+    .block-container { padding-top: 1.5rem !important; }
+    /* Tighten gaps between widget rows */
+    div[data-testid="stVerticalBlock"] { gap: 0.4rem; }
+
     /* ── Streamlit's native bordered container ────────────── */
     /* Used by st.container(border=True) on the New Order page. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
