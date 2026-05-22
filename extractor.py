@@ -1,12 +1,10 @@
 """
 extractor.py
 ════════════
-Shared extraction logic for the new_order_app.
-
-The extract_from_pdf() and flatten_for_csv() functions mirror the same
-functions in app.py exactly. This module is imported by new_order_app.py
-so the queue's "Extract Fields" button uses the same logic as the
-standalone extractor.
+Shared extraction + CSV-flatten logic. Single source of truth for the
+Anthropic call and the flat CSV row shape. Imported by all PA extractor
+pages so review-mode publish and standalone export produce the same
+columns in the same order.
 
 Also provides combined-export helpers that prepend order intake fields
 to the extracted PA data, for the four export formats (text / HTML /
@@ -78,10 +76,56 @@ def extract_from_pdf(pdf_files: list) -> dict:
     return json.loads(raw_text)
 
 
+# ── CSV column order ─────────────────────────────────
+# Explicit lists so output columns are stable across extraction runs.
+# Add new fields at the END of their section to avoid breaking any
+# downstream TPS mapping that relies on column position.
+
+_PROPERTY_COLUMNS = [
+    "street_address", "unit_no", "city", "county", "state",
+    "zip_code", "legal_description", "pid",
+]
+
+_FINANCIAL_COLUMNS = [
+    "purchase_price", "earnest_money_amount", "earnest_money_holder",
+    "financing_type", "down_payment_amount", "seller_concessions",
+    "cash_pct", "cash_amount", "mortgage_pct", "mortgage_amount",
+    "assumption_pct", "assumption_amount",
+    "contract_for_deed_pct", "contract_for_deed_amount",
+]
+
+_DATE_COLUMNS = [
+    "purchase_agreement_date", "closing_date", "possession_date",
+    "buyer_signature_date", "seller_signature_date",
+]
+
+_TITLE_CLOSING_COLUMNS = [
+    "title_company", "closing_agent",
+    "listing_agent_name", "listing_brokerage",
+    "selling_agent_name", "selling_brokerage",
+]
+
+_CONTINGENCY_BOOL_COLUMNS = [
+    "financing_contingency", "inspection_contingency",
+    "appraisal_contingency", "sale_of_buyers_property",
+]
+
+_WELL_SEPTIC_COLUMNS = [
+    "pa_well_known", "pa_ssts_on_property", "pa_well_septic_notes",
+    "disclosure_well_info", "disclosure_ssts_info",
+    "well_number", "discrepancy_flag",
+]
+
+_HOA_COLUMNS = [
+    "hoa_present", "hoa_name", "hoa_dues_amount", "hoa_dues_frequency",
+]
+
+
 def flatten_for_csv(data: dict) -> dict:
     """Flatten nested extraction JSON into a single-row dict for CSV export.
-    
-    Mirrors flatten_for_csv() in app.py.
+
+    Column order is fixed (see _*_COLUMNS lists above) so CSV output is
+    stable across runs — required for TPS column mapping.
     """
     flat = {}
 
@@ -96,36 +140,51 @@ def flatten_for_csv(data: dict) -> dict:
 
     # Property
     prop = data.get("property", {})
-    for key in ["street_address", "city", "county", "state", "zip_code", "legal_description", "pid"]:
+    for key in _PROPERTY_COLUMNS:
         flat[key] = prop.get(key)
 
     # Financial
     fin = data.get("financial", {})
-    for key in ["purchase_price", "earnest_money_amount", "earnest_money_holder",
-                "financing_type", "down_payment_amount", "seller_concessions"]:
+    for key in _FINANCIAL_COLUMNS:
         flat[key] = fin.get(key)
 
     # Dates
     dates = data.get("dates", {})
-    for key in dates:
+    for key in _DATE_COLUMNS:
         flat[key] = dates.get(key)
 
     # Title & Closing
     tc = data.get("title_and_closing", {})
-    for key in tc:
+    for key in _TITLE_CLOSING_COLUMNS:
         flat[key] = tc.get(key)
 
     # Contingencies
     cont = data.get("contingencies", {})
-    for key in ["financing_contingency", "inspection_contingency",
-                "appraisal_contingency", "sale_of_buyers_property"]:
+    for key in _CONTINGENCY_BOOL_COLUMNS:
         flat[key] = cont.get(key)
     flat["other_contingencies"] = "; ".join(cont.get("other_contingencies", []))
 
-    # MN Disclosures
-    mn = data.get("mn_specific_disclosures", {})
-    for key in mn:
-        flat[key] = mn.get(key)
+    # Well / Septic
+    ws = data.get("well_septic", {})
+    for key in _WELL_SEPTIC_COLUMNS:
+        flat[f"ws_{key}"] = ws.get(key)
+
+    # HOA
+    hoa = data.get("hoa", {})
+    for key in _HOA_COLUMNS:
+        flat[f"hoa_{key}"] = hoa.get(key)
+
+    # Home Warranty
+    hw = data.get("home_warranty", {})
+    flat["home_warranty_included"] = hw.get("plan_included")
+    flat["home_warranty_details"] = hw.get("plan_details")
+
+    # Other Terms
+    flat["other_terms"] = data.get("other_terms")
+
+    # FIRPTA
+    firpta = data.get("firpta", {})
+    flat["firpta_foreign_person"] = firpta.get("seller_is_foreign_person")
 
     # Addenda
     flat["addenda_count"] = len(data.get("addenda", []))

@@ -21,6 +21,7 @@ from io import BytesIO
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
 from ui_theme import apply_theme, section_header, section_bar
+from extractor import flatten_for_csv
 import zipfile
 
 # Order-context imports — only used when launched from the Order Queue
@@ -153,84 +154,6 @@ def auto_height(text: str, min_height: int = 68, chars_per_line: int = 80) -> in
     lines = text.count('\n') + 1
     wrapped_lines = max(lines, len(text) // chars_per_line + 1)
     return max(min_height, wrapped_lines * 24 + 44)
-
-
-def flatten_for_csv(data: dict) -> dict:
-    """Flatten nested extraction JSON into a single-row dict for CSV export."""
-    flat = {}
-
-    # Parties
-    buyers = data.get("parties", {}).get("buyers", [])
-    flat["buyer_names"] = "; ".join(b.get("name", "") for b in buyers)
-    flat["buyer_entity_types"] = "; ".join(b.get("entity_type", "") for b in buyers)
-
-    sellers = data.get("parties", {}).get("sellers", [])
-    flat["seller_names"] = "; ".join(s.get("name", "") for s in sellers)
-    flat["seller_entity_types"] = "; ".join(s.get("entity_type", "") for s in sellers)
-
-    # Property
-    prop = data.get("property", {})
-    for key in ["street_address", "unit_no", "city", "county", "state", "zip_code", "legal_description", "pid"]:
-        flat[key] = prop.get(key)
-
-    # Financial
-    fin = data.get("financial", {})
-    for key in ["purchase_price", "earnest_money_amount", "earnest_money_holder",
-                "financing_type", "down_payment_amount", "seller_concessions",
-                "cash_pct", "cash_amount", "mortgage_pct", "mortgage_amount",
-                "assumption_pct", "assumption_amount", "contract_for_deed_pct", "contract_for_deed_amount"]:
-        flat[key] = fin.get(key)
-
-    # Dates
-    dates = data.get("dates", {})
-    for key in dates:
-        flat[key] = dates.get(key)
-
-    # Title & Closing
-    tc = data.get("title_and_closing", {})
-    for key in tc:
-        flat[key] = tc.get(key)
-
-    # Contingencies
-    cont = data.get("contingencies", {})
-    for key in ["financing_contingency", "inspection_contingency",
-                "appraisal_contingency", "sale_of_buyers_property"]:
-        flat[key] = cont.get(key)
-    flat["other_contingencies"] = "; ".join(cont.get("other_contingencies", []))
-
-    # Well/Septic
-    ws = data.get("well_septic", {})
-    for key in ws:
-        flat[f"ws_{key}"] = ws.get(key)
-
-    # HOA
-    hoa = data.get("hoa", {})
-    for key in hoa:
-        flat[f"hoa_{key}"] = hoa.get(key)
-
-    # Home Warranty
-    hw = data.get("home_warranty", {})
-    flat["home_warranty_included"] = hw.get("plan_included")
-    flat["home_warranty_details"] = hw.get("plan_details")
-
-    # Other Terms
-    flat["other_terms"] = data.get("other_terms")
-
-    # FIRPTA
-    firpta = data.get("firpta", {})
-    flat["firpta_foreign_person"] = firpta.get("seller_is_foreign_person")
-
-    # Addenda count
-    flat["addenda_count"] = len(data.get("addenda", []))
-    flat["addenda_titles"] = "; ".join(
-        a.get("addendum_title", "") for a in data.get("addenda", [])
-    )
-
-    # Flags count
-    flags = data.get("extraction_metadata", {}).get("flags", [])
-    flat["flag_count"] = len(flags)
-
-    return flat
 
 
 # ══════════════════════════════════════════════════════
