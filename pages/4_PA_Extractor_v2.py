@@ -180,6 +180,20 @@ def fmt_currency(v):
         return str(v)
 
 
+# Tri-state MN disclosure booleans <-> Yes / No / Not stated labels.
+_TRISTATE_LABELS = ["Not stated", "Yes", "No"]
+_TRISTATE_TO_VALUE = {"Not stated": None, "Yes": True, "No": False}
+
+
+def tristate_index(value) -> int:
+    """Index into _TRISTATE_LABELS for a True / False / None extraction value."""
+    if value is True:
+        return 1
+    if value is False:
+        return 2
+    return 0
+
+
 # ══════════════════════════════════════════════════════
 # Detect non-standard PA (more than ~5% chance — the < 1% case)
 # ══════════════════════════════════════════════════════
@@ -366,20 +380,138 @@ with st.container(border=True):
 # ── PA pp. 5–8: MN-Specific Disclosures ───────────────
 section_header("PA pp. 5–8 — MN-Specific Disclosures")
 with st.container(border=True):
-    mn = data.get("mn_specific_disclosures", {}) or {}
-    if mn:
-        mn_keys = list(mn.keys())
-        mcol1, mcol2 = st.columns(2)
-        half = (len(mn_keys) + 1) // 2
-        with mcol1:
-            for k in mn_keys[:half]:
-                mn[k] = st.text_input(k.replace("_", " ").title(), value=str(mn.get(k, "") or ""), key=f"v2_mn_{k}")
-        with mcol2:
-            for k in mn_keys[half:]:
-                mn[k] = st.text_input(k.replace("_", " ").title(), value=str(mn.get(k, "") or ""), key=f"v2_mn_{k}")
-        data["mn_specific_disclosures"] = mn
-    else:
-        st.caption("_No MN-specific disclosures extracted._")
+    # Well / Septic — PA lines ~369-384 + Seller's Disclosure Statement
+    ws = data.get("well_septic", {}) or {}
+    st.markdown("**Well / Septic — From Purchase Agreement**")
+    wcol1, wcol2 = st.columns(2)
+    with wcol1:
+        _well = st.selectbox(
+            "Seller knows of wells",
+            _TRISTATE_LABELS,
+            index=tristate_index(ws.get("pa_well_known")),
+            key="v2_ws_well_known",
+        )
+        ws["pa_well_known"] = _TRISTATE_TO_VALUE[_well]
+    with wcol2:
+        _ssts = st.selectbox(
+            "SSTS on property",
+            _TRISTATE_LABELS,
+            index=tristate_index(ws.get("pa_ssts_on_property")),
+            key="v2_ws_ssts",
+        )
+        ws["pa_ssts_on_property"] = _TRISTATE_TO_VALUE[_ssts]
+    ws["pa_well_septic_notes"] = st.text_area(
+        "PA Well/Septic Notes",
+        value=ws.get("pa_well_septic_notes", "") or "",
+        key="v2_ws_pa_notes",
+        height=68,
+    ) or None
+
+    st.markdown("**Well / Septic — From Disclosure Statement**")
+    dcol1, dcol2 = st.columns(2)
+    with dcol1:
+        ws["disclosure_well_info"] = st.text_area(
+            "Disclosure — Well",
+            value=ws.get("disclosure_well_info", "") or "",
+            key="v2_ws_disc_well",
+            height=68,
+        ) or None
+    with dcol2:
+        ws["disclosure_ssts_info"] = st.text_area(
+            "Disclosure — SSTS",
+            value=ws.get("disclosure_ssts_info", "") or "",
+            key="v2_ws_disc_ssts",
+            height=68,
+        ) or None
+    ncol1, ncol2 = st.columns(2)
+    with ncol1:
+        ws["well_number"] = st.text_input(
+            "Well Number (MDH)",
+            value=ws.get("well_number", "") or "",
+            key="v2_ws_well_number",
+        ) or None
+    with ncol2:
+        ws["discrepancy_flag"] = st.checkbox(
+            "PA / Disclosure discrepancy",
+            value=bool(ws.get("discrepancy_flag", False)),
+            key="v2_ws_discrepancy",
+        )
+    if ws.get("discrepancy_flag"):
+        st.warning("⚠️ Discrepancy flagged between PA and Disclosure Statement — review well/septic details.")
+    data["well_septic"] = ws
+
+    # Home Warranty — PA lines ~385-392
+    st.markdown("**Home Warranty**")
+    hw = data.get("home_warranty", {}) or {}
+    hwcol1, hwcol2 = st.columns([1, 3])
+    with hwcol1:
+        hw["plan_included"] = st.checkbox(
+            "Plan included",
+            value=bool(hw.get("plan_included", False)),
+            key="v2_hw_included",
+        )
+    with hwcol2:
+        hw["plan_details"] = st.text_input(
+            "Home Warranty Details",
+            value=hw.get("plan_details", "") or "",
+            key="v2_hw_details",
+        ) or None
+    data["home_warranty"] = hw
+
+    # HOA / Association — PA checkbox / CIC addendum
+    st.markdown("**HOA / Association**")
+    hoa = data.get("hoa", {}) or {}
+    hoa["hoa_present"] = st.checkbox(
+        "HOA / association present",
+        value=bool(hoa.get("hoa_present", False)),
+        key="v2_hoa_present",
+    )
+    hoacol1, hoacol2, hoacol3 = st.columns([2, 1, 1])
+    with hoacol1:
+        hoa["hoa_name"] = st.text_input(
+            "HOA Name",
+            value=hoa.get("hoa_name", "") or "",
+            key="v2_hoa_name",
+        ) or None
+    with hoacol2:
+        _dues_in = st.text_input(
+            "HOA Dues",
+            value=fmt_currency(hoa.get("hoa_dues_amount")),
+            key="v2_hoa_dues",
+        )
+        hoa["hoa_dues_amount"] = parse_currency(_dues_in) if _dues_in.strip() else None
+    with hoacol3:
+        hoa["hoa_dues_frequency"] = st.text_input(
+            "Dues Frequency",
+            value=hoa.get("hoa_dues_frequency", "") or "",
+            key="v2_hoa_freq",
+        ) or None
+    data["hoa"] = hoa
+
+
+# ── PA pp. 8–10: Standard Provisions ──────────────────
+section_header("PA pp. 8–10 — Standard Provisions")
+with st.container(border=True):
+    # Other Terms — PA lines ~454+
+    st.markdown("**Other Terms**")
+    data["other_terms"] = st.text_area(
+        "Other Terms",
+        value=data.get("other_terms", "") or "",
+        key="v2_other_terms",
+        height=68,
+    ) or None
+
+    # FIRPTA — PA line ~493
+    st.markdown("**FIRPTA**")
+    firpta = data.get("firpta", {}) or {}
+    _firpta = st.selectbox(
+        "FIRPTA — Seller is a foreign person",
+        _TRISTATE_LABELS,
+        index=tristate_index(firpta.get("seller_is_foreign_person")),
+        key="v2_firpta",
+    )
+    firpta["seller_is_foreign_person"] = _TRISTATE_TO_VALUE[_firpta]
+    data["firpta"] = firpta
 
 
 # ── PA pp. 10+: Addenda ───────────────────────────────
