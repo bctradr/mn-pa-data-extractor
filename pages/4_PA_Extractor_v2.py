@@ -26,7 +26,7 @@ import pandas as pd
 import zipfile
 from io import BytesIO
 
-from extractor import extract_from_pdf, flatten_combined_for_csv, intake_summary_text, intake_summary_html
+from extractor import extract_from_pdf, flatten_combined_for_csv, intake_summary_text, intake_summary_html, parse_currency
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
 from supabase_client import set_order_status, update_extraction
@@ -261,9 +261,11 @@ with st.container(border=True):
     fin = data.get("financial", {}) or {}
     fcol1, fcol2 = st.columns(2)
     with fcol1:
-        fin["purchase_price"] = st.text_input("Purchase Price", value=fmt_currency(fin.get("purchase_price")), key="v2_fin_price")
+        _price_in = st.text_input("Purchase Price", value=fmt_currency(fin.get("purchase_price")), key="v2_fin_price")
+        fin["purchase_price"] = parse_currency(_price_in)
     with fcol2:
-        fin["down_payment_amount"] = st.text_input("Down Payment", value=fmt_currency(fin.get("down_payment_amount")), key="v2_fin_down")
+        _down_in = st.text_input("Down Payment", value=fmt_currency(fin.get("down_payment_amount")), key="v2_fin_down")
+        fin["down_payment_amount"] = parse_currency(_down_in)
     data["financial"] = fin
 
 
@@ -272,11 +274,12 @@ section_header("PA pp. 2–3 — Earnest Money, Financing & Closing")
 with st.container(border=True):
     fcol1, fcol2 = st.columns(2)
     with fcol1:
-        fin["earnest_money_amount"] = st.text_input(
+        _em_in = st.text_input(
             "Earnest Money Amount",
             value=fmt_currency(fin.get("earnest_money_amount")),
             key="v2_em_amt",
         )
+        fin["earnest_money_amount"] = parse_currency(_em_in)
         fin["earnest_money_holder"] = st.text_input(
             "Earnest Money Holder",
             value=fin.get("earnest_money_holder", "") or "",
@@ -288,11 +291,12 @@ with st.container(border=True):
             value=fin.get("financing_type", "") or "",
             key="v2_fin_type",
         )
-        fin["seller_concessions"] = st.text_input(
+        _conc_in = st.text_input(
             "Seller Concessions",
             value=fmt_currency(fin.get("seller_concessions")),
             key="v2_fin_conc",
         )
+        fin["seller_concessions"] = parse_currency(_conc_in)
 
     # Dates
     dates = data.get("dates", {}) or {}
@@ -331,18 +335,26 @@ with st.container(border=True):
     cont = data.get("contingencies", {}) or {}
     ccol1, ccol2 = st.columns(2)
     with ccol1:
-        cont["financing_contingency"] = st.text_input(
-            "Financing Contingency", value=str(cont.get("financing_contingency", "") or ""), key="v2_cont_fin"
+        cont["financing_contingency"] = st.checkbox(
+            "Financing Contingency",
+            value=bool(cont.get("financing_contingency", False)),
+            key="v2_cont_fin",
         )
-        cont["inspection_contingency"] = st.text_input(
-            "Inspection Contingency", value=str(cont.get("inspection_contingency", "") or ""), key="v2_cont_insp"
+        cont["inspection_contingency"] = st.checkbox(
+            "Inspection Contingency",
+            value=bool(cont.get("inspection_contingency", False)),
+            key="v2_cont_insp",
         )
     with ccol2:
-        cont["appraisal_contingency"] = st.text_input(
-            "Appraisal Contingency", value=str(cont.get("appraisal_contingency", "") or ""), key="v2_cont_apr"
+        cont["appraisal_contingency"] = st.checkbox(
+            "Appraisal Contingency",
+            value=bool(cont.get("appraisal_contingency", False)),
+            key="v2_cont_apr",
         )
-        cont["sale_of_buyers_property"] = st.text_input(
-            "Sale of Buyer's Property", value=str(cont.get("sale_of_buyers_property", "") or ""), key="v2_cont_sale"
+        cont["sale_of_buyers_property"] = st.checkbox(
+            "Sale of Buyer's Property",
+            value=bool(cont.get("sale_of_buyers_property", False)),
+            key="v2_cont_sale",
         )
 
     other = "; ".join(cont.get("other_contingencies", []) or [])

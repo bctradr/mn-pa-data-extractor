@@ -21,7 +21,7 @@ from io import BytesIO
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
 from ui_theme import apply_theme, section_header, section_bar
-from extractor import flatten_for_csv
+from extractor import flatten_for_csv, parse_currency
 import zipfile
 
 # Order-context imports — only used when launched from the Order Queue
@@ -124,18 +124,6 @@ def format_currency(value) -> str:
         return f"{float(value):,.2f}"
     except (ValueError, TypeError):
         return str(value)
-
-
-def parse_currency(text: str) -> float:
-    """Parse a currency string back to a float."""
-    if not text or text.strip() == "":
-        return 0.0
-    # Remove $, commas, spaces
-    cleaned = text.replace("$", "").replace(",", "").strip()
-    try:
-        return float(cleaned)
-    except ValueError:
-        return 0.0
 
 
 def dynamic_text(label: str, value: str, key: str = None):

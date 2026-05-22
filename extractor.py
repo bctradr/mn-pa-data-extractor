@@ -34,6 +34,25 @@ def get_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
+# ── Formatting / parsing helpers ──────────────────────
+
+def parse_currency(text: str) -> float:
+    """Parse a currency string (e.g. "$325,000.00") back to a float.
+
+    Shared so the review/standalone pages round-trip currency text inputs to
+    a number before storing them in the extraction dict. The summary and CSV
+    exporters expect numeric values, not display strings.
+    """
+    if not text or text.strip() == "":
+        return 0.0
+    # Remove $, commas, spaces
+    cleaned = text.replace("$", "").replace(",", "").strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
 # ── Extraction (mirrors app.py) ───────────────────────
 
 def extract_from_pdf(pdf_files: list) -> dict:
