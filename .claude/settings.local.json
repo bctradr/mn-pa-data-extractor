@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile extractor.py \"pages/3_PA_Extractor.py\" \"pages/4_PA_Extractor_v2.py\")",
+      "Bash(git -C \"C:/Users/bctra/Documents/mn-pa-data-extractor\" status)",
+      "Bash(git -C \"C:/Users/bctra/Documents/mn-pa-data-extractor\" diff --stat)",
+      "Bash(git *)"
+    ]
+  }
+}
