@@ -9,14 +9,8 @@ Documented only — no fixes applied yet.
 
 These either silently corrupt output, block users, or actively mislead.
 
-### 1. Published CSV silently drops fields
-`pages/3_PA_Extractor.py:158` defines a rich `flatten_for_csv` (unit_no, full
-financing breakdown, well/septic, HOA, home warranty, FIRPTA, other_terms).
-`extractor.py:81` defines an older, slimmer version. Standalone export uses
-the rich one; review-mode **Publish CSV** uses `flatten_combined_for_csv`
-which calls the slim one. v2 also imports the slim one. Result: CSVs going to
-TPS via the queue are missing fields that the standalone export includes.
-Same data, different output — silent data loss.
+### ~~1. Published CSV silently drops fields~~ — RESOLVED (June 2026)
+See Resolved section below.
 
 ### 2. Uploader accepts non-PDFs but extractor only handles PDFs
 `pages/1_New_Order.py:65` accepts `pdf, docx, msg, eml`. `extractor.extract_from_pdf`
@@ -54,10 +48,8 @@ half its docs and no way to recover except manual cleanup or full delete.
 Annoying, code-quality, partial features. Won't bite immediately, but worth
 clearing as you touch nearby code.
 
-### 6. `extract_from_pdf` is duplicated between v1 and the shared module
-`pages/3_PA_Extractor.py:66` reimplements `extract_from_pdf` instead of
-importing from `extractor.py` like v2 does. Same logic, two places to keep
-in sync.
+### ~~6. `extract_from_pdf` is duplicated between v1 and the shared module~~ — RESOLVED (June 2026)
+See Resolved section below.
 
 ### 7. Status state machine is one-way and incomplete
 `pages/2_Order_Queue.py:_open_for_review` only flips `new → in_review`.
@@ -98,16 +90,36 @@ import.
 
 Lower-priority fragility — worth being aware of, not worth a dedicated PR.
 
-### 12. CSV column order is non-deterministic
-`flatten_for_csv` iterates `for key in dates:` / `title_and_closing:` /
-`mn_specific_disclosures:` — column order depends on whichever keys Claude
-returned this run. If TPS import mapping ever depends on positional
-columns, this will surface as intermittent breakage. Locking down an
-explicit column order would fix it.
+### ~~12. CSV column order is non-deterministic~~ — RESOLVED (June 2026)
+See Resolved section below.
 
 ### 13. `MAX_TOKENS = 4096` is tight for addenda-heavy agreements
-`extractor.py:27` and `pages/3_PA_Extractor.py:51` both cap output at 4096
-tokens. A long agreement with several addenda can exceed this; the failure
-surfaces to the user as a `JSONDecodeError` with a "try re-uploading"
-message rather than a truncation explanation. Consider bumping the cap or
-detecting truncation explicitly.
+
+`extractor.py` caps output at 4096 tokens (the constant now lives only there;
+the duplicate in pages/3 was removed June 2026). A long agreement with several
+addenda can exceed this; the failure surfaces to the user as a `JSONDecodeError`
+with a "try re-uploading" message rather than a truncation explanation. Consider
+bumping the cap or detecting truncation explicitly.
+
+---
+
+## Resolved
+
+### #1. Published CSV silently drops fields
+**Resolved June 2026** — `extractor.py` was restored from commit `ea5799a`,
+bringing back the rich `flatten_for_csv` with explicit column lists covering
+all fields (unit_no, full financing breakdown, well/septic, HOA, home warranty,
+FIRPTA, other_terms, flags). Pages 3 and 4 both import and use this single
+implementation. Publish CSV and standalone export now produce the same columns.
+
+### #6. `extract_from_pdf` duplicated between pages/3 and extractor.py
+**Resolved June 2026** — The inline `get_client` and `extract_from_pdf`
+definitions in `pages/3_PA_Extractor.py` were removed. Page 3 now imports
+`extract_from_pdf` from `extractor.py`, consistent with how page 4 has always
+worked. Single source of truth restored per CLAUDE.md principles.
+
+### #12. CSV column order non-deterministic
+**Resolved June 2026** — The restored `extractor.py` uses explicit `_*_COLUMNS`
+lists (`_PROPERTY_COLUMNS`, `_FINANCIAL_COLUMNS`, `_DATE_COLUMNS`, etc.) for all
+sections. Column order is now fixed across runs, not dependent on whichever keys
+Claude returned.

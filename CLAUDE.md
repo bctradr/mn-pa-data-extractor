@@ -43,6 +43,25 @@ Planned siblings (separate apps, shared backend):
 - Migration off Supabase
 - MCP server (revisit when 2+ apps need shared live data access)
 - Auth beyond Streamlit secrets / Cloudflare Access
+- Multi-model support (see below)
+
+## Deferred: multi-model support
+
+Multi-model support (GLM-5.2 via OpenRouter as a cheaper default) was attempted
+in June 2026 and reverted. Key learning: **model swapping is not a config change
+for this app.** Claude's extraction path sends PDFs natively as base64 document
+blocks; models accessed via OpenRouter receive plain chat-completion calls with no
+equivalent PDF-block support. A second provider requires a separate
+document-ingestion pipeline (PDF → text extraction via PyMuPDF or similar) before
+the model is ever called — it's a different architecture, not a different API key.
+
+If multi-model is revisited:
+- Use LiteLLM as the abstraction layer (eliminates hand-rolled ModelBackend /
+  GLMClient boilerplate)
+- Build a provider-aware ingestion step: native PDF blocks for Claude, text
+  extraction + chat-completion for everything else
+- Keep extraction quality as the primary metric — cost savings only matter if
+  structured JSON output is reliable enough for TPS import without manual review
 
 ## Known issues
 See ISSUES.md in the repo root for a prioritized list of known bugs and
