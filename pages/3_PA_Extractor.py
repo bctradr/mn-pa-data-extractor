@@ -10,18 +10,14 @@ Setup:
 """
 
 import streamlit as st
-import anthropic
-import base64
 import json
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
 
-# ── Import the extraction prompt ──────────────────────
-from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from summary_generator import generate_text_summary, generate_html_summary
 from ui_theme import apply_theme, section_header, section_bar
-from extractor import flatten_for_csv, parse_currency
+from extractor import flatten_for_csv, parse_currency, extract_from_pdf
 import zipfile
 
 # Order-context imports — only used when launched from the Order Queue
@@ -48,61 +44,10 @@ except Exception:
 
 apply_theme()
 
-MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 4096
-
-
 
 # ══════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ══════════════════════════════════════════════════════
-
-@st.cache_resource
-def get_client():
-    """Initialize Anthropic client (cached across reruns)."""
-    api_key = st.secrets.get("ANTHROPIC_API_KEY", None)
-    return anthropic.Anthropic(api_key=api_key)
-
-
-def extract_from_pdf(pdf_files: list) -> dict:
-    """Send one or more PDFs to Claude and return parsed JSON."""
-    client = get_client()
-
-    # Build document blocks for each PDF
-    content = []
-    for pdf_bytes, filename in pdf_files:
-        pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
-        content.append({
-            "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": pdf_b64,
-            },
-        })
-    content.append({
-        "type": "text",
-        "text": "Extract all fields from this Minnesota purchase agreement. All uploaded documents are part of the same transaction. Return only JSON.",
-    })
-
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        temperature=0,
-        system=EXTRACTION_SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": content,
-            }
-        ],
-    )
-
-    raw_text = response.content[0].text
-    # Strip markdown fences if Claude includes them despite instructions
-    raw_text = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    return json.loads(raw_text)
-
 
 def get_line_ref(data: dict, field_name: str) -> str:
     """Get the PA line number reference for a field, formatted for display."""

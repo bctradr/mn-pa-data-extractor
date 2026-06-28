@@ -2,4 +2,3 @@ streamlit
 anthropic
 pandas
 supabase
-openai>=1.0.0
