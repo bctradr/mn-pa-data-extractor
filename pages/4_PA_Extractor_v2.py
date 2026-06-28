@@ -15,7 +15,7 @@ from models.base import ModelBackend
 import config
 from extraction_prompt import EXTRACTION_SYSTEM_PROMPT
 from supabase_client import set_order_status, update_extraction
-from extractor import flatten_combined_for_csv, intake_summary_text, parse_currency  # Keep your helpers
+from extractor import flatten_combined_for_csv, intake_summary_text, parse_currency
 
 st.set_page_config(page_title="PA Extractor v2", page_icon="📑", layout="wide")
 apply_theme()
