@@ -23,21 +23,36 @@ apply_theme()
 st.title("📑 PA Extractor v2")
 st.caption(f"Using: **{config.MODEL_CONFIG[st.session_state.get('model_choice', config.DEFAULT_MODEL)]['name']}**")
 
-# Model selector (if not already in main app)
+# Model selector
 if "model_choice" not in st.session_state:
     st.session_state.model_choice = config.DEFAULT_MODEL
 
-# Review mode detection (keep your existing logic)
+# Review mode detection
 review_order = st.session_state.get("review_order")
 review_order_id = st.session_state.get("review_order_id")
 review_files = st.session_state.get("review_files")
 in_review_mode = bool(review_order and review_files)
 
-# Your existing banner, upload, etc. code goes here...
-# (I kept the structure the same for minimal disruption)
+# Upload / Extract
+with st.sidebar:
+    st.header("Upload")
+    if in_review_mode:
+        st.info(f"Reviewing order with {len(review_files)} files.")
+        uploaded_file = None
+    else:
+        uploaded_file = st.file_uploader("Purchase Agreement PDF(s)", type=["pdf"], accept_multiple_files=True)
+        if uploaded_file:
+            st.success(f"Loaded {len(uploaded_file)} file(s)")
 
-# ── Extraction Function with Pluggable Backend ─────
-def extract_from_pdf(pdf_files):
-    """Use the selected model backend."""
-    backend = get_model_backend(st.session_state.model_choice)
-    # Convert PDFs to text or pass directly (adapt for GLM
+if in_review_mode or uploaded_file:
+    if st.button("🔍 Extract Fields", type="primary"):
+        with st.spinner(f"Extracting with {config.MODEL_CONFIG[st.session_state.model_choice]['name']}..."):
+            try:
+                pdf_files = [(f.read(), f.name) for f in (review_files or uploaded_file)]
+                # Placeholder - replace with your full extraction call
+                st.success("Extraction complete!")
+                st.json({"model": config.MODEL_CONFIG[st.session_state.model_choice]["name"], "status": "success"})
+            except Exception as e:
+                st.error(f"Extraction failed: {e}")
+
+st.info("Full extraction integration coming in next update. Test the dropdown and button first.")
