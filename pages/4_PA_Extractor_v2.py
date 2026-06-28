@@ -9,7 +9,7 @@ import pandas as pd
 import zipfile
 from io import BytesIO
 
-from ui_theme import apply_theme
+from ui_theme import apply_theme, section_header, section_bar
 from summary_generator import generate_text_summary, generate_html_summary
 from models.base import ModelBackend
 import config
@@ -45,6 +45,11 @@ with st.sidebar:
             st.success(f"Loaded {len(uploaded_file)} file(s)")
 
 if (in_review_mode or uploaded_file) and st.button("🔍 Extract Fields", type="primary"):
-    with st.spinner(f"Extracting with {config.MODEL_CONFIG[st.session_state.model_choice]['name']}..."):
+    with st.spinner("Extracting..."):
         try:
-           
+            pdf_files = [(f.read(), f.name) for f in (review_files or uploaded_file)]
+            backend = get_model_backend(st.session_state.model_choice)
+            result = backend.extract(pdf_files)
+            st.session_state["extraction"] = result
+            st.success(f"Success with {backend.get_model_name()}")
+        except Exception as e:
