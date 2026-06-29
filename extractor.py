@@ -57,10 +57,16 @@ def parse_currency(text: str) -> float:
 
 def extract_from_pdf(pdf_files: list) -> dict:
     """Send one or more PDFs to Claude and return parsed JSON.
-    
-    pdf_files: list of (pdf_bytes, filename) tuples.
+
+    pdf_files: list of (pdf_bytes, filename) tuples. Non-PDF files are
+    filtered out before sending to Claude; callers should surface a note
+    to the user if any were skipped.
     """
     client = get_client()
+
+    pdf_files = [(b, fn) for b, fn in pdf_files if fn.lower().endswith(".pdf")]
+    if not pdf_files:
+        raise ValueError("No PDF files to extract from. Upload at least one PDF.")
 
     content = []
     for pdf_bytes, _filename in pdf_files:

@@ -111,12 +111,18 @@ with st.sidebar:
 # ── Auto-extract in review mode; manual button in standalone ──
 if in_review_mode:
     if "extraction" not in st.session_state:
+        pdf_files = [(b, fn) for b, fn in review_files if fn.lower().endswith(".pdf")]
+        if not pdf_files:
+            st.error(
+                "This order has no PDF files — other file types (.docx, .msg, .eml) "
+                "are stored for reference only. Attach a PDF to run extraction."
+            )
+            st.stop()
         with st.spinner("Reading agreement and extracting fields..."):
             try:
-                pdf_files = [(b, fname) for (b, fname) in review_files]
                 result = extract_from_pdf(pdf_files)
                 st.session_state["extraction"] = result
-                st.session_state["filename"] = review_files[0][1]
+                st.session_state["filename"] = pdf_files[0][1]
             except json.JSONDecodeError as e:
                 st.error(f"Claude returned invalid JSON. Try Re-extract. Error: {e}")
                 st.stop()
@@ -125,14 +131,25 @@ if in_review_mode:
                 st.stop()
 
     if st.button("🔁 Re-run extraction", help="Re-extract from the loaded PDFs"):
+        pdf_files = [(b, fn) for b, fn in review_files if fn.lower().endswith(".pdf")]
+        if not pdf_files:
+            st.error(
+                "This order has no PDF files — other file types (.docx, .msg, .eml) "
+                "are stored for reference only. Attach a PDF to run extraction."
+            )
+            st.stop()
         with st.spinner("Re-running extraction..."):
             try:
-                pdf_files = [(b, fname) for (b, fname) in review_files]
                 result = extract_from_pdf(pdf_files)
                 st.session_state["extraction"] = result
                 st.rerun()
             except Exception as e:
                 st.error(f"Re-extraction failed: {e}")
+
+    _n_pdf = sum(1 for _, fn in review_files if fn.lower().endswith(".pdf"))
+    _n_other = len(review_files) - _n_pdf
+    if _n_other > 0:
+        st.caption(f"Extracting from {_n_pdf} PDF(s) — {_n_other} non-PDF file(s) attached for reference only.")
 else:
     if not uploaded_file:
         st.info("👈 Upload a purchase agreement PDF to get started.")
