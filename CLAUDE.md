@@ -8,6 +8,8 @@ Currently includes:
 - New Order workflow (pages/1_New_Order.py) — intake fields + file upload,
   creates an order row in Supabase
 - Order Queue (pages/2_Order_Queue.py) — lists saved orders, launches review
+- Water Bill Tracker (pages/5_Water_Bills.py + water_bills.py) — creates and tracks
+  water bill requests to municipalities; followup log; receives bill PDFs
 
 Planned siblings (separate apps, shared backend):
 - Title examiner tool
@@ -17,13 +19,15 @@ Planned siblings (separate apps, shared backend):
 ## Stack
 - Python + Streamlit (UI)
 - Anthropic SDK for extraction (model: claude-sonnet-4-6)
-- Supabase (Postgres tables: orders, order_documents; storage bucket: order-documents)
+- Supabase (Postgres tables: orders, order_documents, municipalities,
+  water_bill_requests, water_bill_followups; storage buckets: order-documents,
+  water-bills)
 - Hosted on Streamlit Community Cloud
 
 ## Architectural principles
 - Business logic lives in plain-Python modules (extractor.py, supabase_client.py,
-  summary_generator.py, assignment_rules.py, transaction_categories.py, ui_theme.py)
-  — NOT inside Streamlit page files.
+  water_bills.py, summary_generator.py, assignment_rules.py, transaction_categories.py,
+  ui_theme.py) — NOT inside Streamlit page files.
 - Streamlit pages orchestrate UI only — they call into shared modules for anything
   that touches data, files, or LLMs.
 - Single source of truth: shared functions live in one module and get imported,
@@ -62,6 +66,31 @@ If multi-model is revisited:
   extraction + chat-completion for everything else
 - Keep extraction quality as the primary metric — cost savings only matter if
   structured JSON output is reliable enough for TPS import without manual review
+
+## Water Bill Tracker
+
+Module structure:
+- `water_bills.py` — all Supabase calls for the water bill domain (municipalities,
+  requests, followups, storage). No Streamlit imports; pure business logic.
+- `pages/5_Water_Bills.py` — Streamlit UI only; imports everything from water_bills.py.
+
+Tables: `municipalities`, `water_bill_requests`, `water_bill_followups`
+(see `supabase/migrations/003_water_bills.sql`). Seed data for test municipalities:
+`data/municipalities_seed.sql`.
+
+Storage bucket: `water-bills` (private). Create in the Supabase Dashboard before
+first use of `upload_bill_pdf()`.
+
+Two-table followup pattern: `water_bill_followups` is an append-only log of outreach
+actions (sent, follow_up, phone_call, received, note). Each entry can advance the
+parent `water_bill_requests.status` according to `_ACTION_TO_STATUS` in water_bills.py.
+`updated_at` is bumped manually by `update_request()` — no DB trigger is needed.
+
+Phase 2 deferred items (not yet implemented):
+- Outbound email via Microsoft Graph / SendGrid
+- Fax via Phaxio
+- Auto-create a water bill request when a New Order is saved (see TODO comment in
+  streamlit_app.py; the field-mapping logic is already in `create_request_from_order()`)
 
 ## Known issues
 See ISSUES.md in the repo root for a prioritized list of known bugs and
