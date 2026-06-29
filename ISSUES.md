@@ -12,13 +12,8 @@ These either silently corrupt output, block users, or actively mislead.
 ### ~~1. Published CSV silently drops fields~~ — RESOLVED (June 2026)
 See Resolved section below.
 
-### 2. Uploader accepts non-PDFs but extractor only handles PDFs
-`pages/1_New_Order.py:65` accepts `pdf, docx, msg, eml`. `extractor.extract_from_pdf`
-base64-encodes the bytes and hard-codes `media_type: application/pdf`. The
-moment a user uploads a `.docx` / `.msg` / `.eml` and someone hits Extract from
-the queue, the call will either fail or feed Claude garbage that looks like a
-PDF. Either narrow the uploader to PDF-only, or route non-PDF bytes around the
-extractor.
+### ~~2. Uploader accepts non-PDFs but extractor only handles PDFs~~ — RESOLVED (June 2026)
+See Resolved section below.
 
 ### 3. README and DEPLOYMENT.md are stale
 `README.md` says `streamlit run app.py` and lists `app.py` as the entry. That
@@ -104,6 +99,18 @@ bumping the cap or detecting truncation explicitly.
 ---
 
 ## Resolved
+
+### #2. Uploader accepts non-PDFs but extractor only handles PDFs
+**Resolved June 2026** — Took the gated-extraction path: uploader in
+`pages/1_New_Order.py` still accepts .pdf, .docx, .msg, .eml (non-PDFs stored
+for reference). `extractor.py`'s `extract_from_pdf` now filters to PDF-only
+before building document blocks and raises `ValueError` if nothing remains.
+Pages 3 and 4 add a page-level pre-check (outside the try block, to avoid
+Streamlit's `StopException` being caught by `except Exception`) that shows a
+clear user-facing error for zero-PDF orders. When non-PDFs are present alongside
+PDFs, a caption shows "Extracting from N PDF(s) — M non-PDF file(s) attached
+for reference only." Also fixed: `st.session_state["filename"]` now uses the
+first PDF filename rather than the first file in the raw list.
 
 ### #1. Published CSV silently drops fields
 **Resolved June 2026** — `extractor.py` was restored from commit `ea5799a`,
