@@ -60,10 +60,25 @@ def calculate_send_by_date(closing_date, municipality_id: str = None) -> tuple:
 
 
 def get_municipalities() -> list:
-    """Fetch all municipalities ordered alphabetically."""
+    """Fetch all municipalities ordered alphabetically, paginating past the 1000-row PostgREST default."""
     sb = get_supabase()
-    result = sb.table("municipalities").select("*").order("name").execute()
-    return result.data or []
+    all_rows = []
+    page_size = 1000
+    page = 0
+    while True:
+        result = (
+            sb.table("municipalities")
+            .select("*")
+            .order("name")
+            .range(page * page_size, (page + 1) * page_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        page += 1
+    return all_rows
 
 
 def create_municipality(data: dict) -> dict:
