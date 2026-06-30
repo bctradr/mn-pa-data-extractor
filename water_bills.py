@@ -13,11 +13,30 @@ All Supabase calls use get_supabase() from supabase_client.py.
 Outbound sending (email via MS Graph, fax via Phaxio) is deferred to Phase 2.
 """
 
+import re
 from datetime import datetime, timezone, date, timedelta
 from supabase_client import get_supabase
 
 WATER_BILLS_BUCKET = "water-bills"
 GLOBAL_LEAD_TIME_DAYS = 7
+
+# ── Reply-matching constants ───────────────────────────────────────────────────
+
+_FILE_NUM_RE = re.compile(r'File#\s*([A-Za-z0-9\-]+)', re.IGNORECASE)
+_DOLLAR_RE   = re.compile(r'\$[\d,]+\.?\d*|\b\d[\d,]+\.\d{2}\b')
+_STREET_RE   = re.compile(r'^\s*(\d+\s+[A-Za-z0-9][^,\n]{2,30})', re.IGNORECASE)
+
+_BOUNCE_INDICATORS = [
+    "delivery status notification",
+    "undeliverable",
+    "mail delivery failed",
+    "returned mail",
+    "failure notice",
+    "auto-reply",
+    "automatic reply",
+    "out of office",
+    "autoreply",
+]
 
 # Maps followup action → resulting request status.
 # 'note' entries are logged without changing the parent status.
@@ -392,7 +411,7 @@ def compose_water_bill_email(request: dict) -> tuple:
         contact_lines.append("Assistant: " + " | ".join(parts))
     contact_block = "\n".join(contact_lines) if contact_lines else "See reply address above."
 
-    subject = f"Water Bill Request — {address} — Closing {closing}"
+    subject = f"Water Bill Request - File# {file_num} - {address}"
 
     body = f"""\
 Dear {muni_name} Water Department,
@@ -415,3 +434,133 @@ Contact information:
 Thank you for your assistance.
 """
     return subject, body
+
+
+# ── Inbound reply matching ─────────────────────────────────────────────────────
+
+def _classify_reply(message: dict) -> str:
+    """Classify an inbound message as 'bounce', 'structured_reply', or 'unstructured_reply'."""
+    text = ((message.get("subject") or "") + " " + (message.get("body") or "")).lower()
+    if any(ind in text for ind in _BOUNCE_INDICATORS):
+        return "bounce"
+    if _DOLLAR_RE.search(message.get("body") or ""):
+        return "structured_reply"
+    return "unstructured_reply"
+
+
+def _extract_street_portion(address: str) -> str | None:
+    """Extract 'street number + street name' from a full address for fallback matching.
+
+    E.g. '123 Main St, Apt 4, Minneapolis, MN 55401' -> '123 Main St'.
+    Returns None if address is blank or doesn't start with a street number.
+    """
+    if not address:
+        return None
+    m = _STREET_RE.match(address)
+    return m.group(1).strip() if m else None
+
+
+def _match_reply(message: dict, active_requests: list) -> tuple:
+    """Try to match an inbound message to an active request.
+
+    Matching priority:
+    1. Regex for 'File# XXXX' in the subject line matched against file_number.
+    2. Fallback: street portion of property_address found in subject or body.
+
+    Returns (matched_request, signal) where signal is 'file_number' or
+    'property_address', or (None, None) if no match.
+    Sender address is never used as a matching criterion.
+    """
+    subject = message.get("subject") or ""
+    body    = message.get("body") or ""
+
+    # Signal 1 — file number token in subject
+    file_num_match = _FILE_NUM_RE.search(subject)
+    if file_num_match:
+        found_num = file_num_match.group(1).strip()
+        for req in active_requests:
+            req_num = (req.get("file_number") or "").strip()
+            if req_num and req_num == found_num:
+                return req, "file_number"
+
+    # Signal 2 — street portion of property address in subject or body
+    haystack = (subject + " " + body).lower()
+    for req in active_requests:
+        street = _extract_street_portion(req.get("property_address") or "")
+        if street and len(street) >= 6 and street.lower() in haystack:
+            return req, "property_address"
+
+    return None, None
+
+
+def log_unmatched_message(message: dict) -> None:
+    """Store an unmatched inbox message. Silently skips duplicates (unique gmail_message_id)."""
+    sb = get_supabase()
+    sb.table("water_bill_unmatched_messages").upsert(
+        {
+            "gmail_message_id": message.get("id"),
+            "from_address":     message.get("from"),
+            "subject":          message.get("subject"),
+            "body_preview":     (message.get("body") or "")[:500],
+            "received_at":      message.get("date"),
+            "checked_at":       datetime.now(timezone.utc).isoformat(),
+        },
+        on_conflict="gmail_message_id",
+    ).execute()
+
+
+def process_inbox_replies(messages: list) -> dict:
+    """Match a list of fetched inbox messages to active requests.
+
+    For each message:
+    - If matched (by file number or property address): logs a followup note on
+      the matched request recording the signal and classification.
+    - If unmatched: stores in water_bill_unmatched_messages (requires migration 005).
+
+    Args:
+        messages: list of message dicts from gmail_client.check_inbox().
+
+    Returns:
+        {
+          "matched":   list of {request_id, file_number, property_address,
+                                message, signal, classification},
+          "unmatched": list of raw message dicts,
+        }
+    """
+    active = get_requests({"status": ["pending", "sent", "follow_up_sent"]})
+    matched   = []
+    unmatched = []
+
+    for msg in messages:
+        req, signal = _match_reply(msg, active)
+        classification = _classify_reply(msg)
+
+        if req:
+            notes = (
+                f"Inbound reply — matched on {signal.replace('_', ' ')} — "
+                f"{classification.replace('_', ' ')} — "
+                f"from: {msg.get('from') or '—'}"
+            )
+            log_followup(
+                request_id=req["id"],
+                action="note",
+                method="email",
+                notes=notes,
+                logged_by="system",
+            )
+            matched.append({
+                "request_id":       req["id"],
+                "file_number":      req.get("file_number"),
+                "property_address": req.get("property_address"),
+                "message":          msg,
+                "signal":           signal,
+                "classification":   classification,
+            })
+        else:
+            try:
+                log_unmatched_message(msg)
+            except Exception:
+                pass  # table may not exist yet; don't crash reply processing
+            unmatched.append(msg)
+
+    return {"matched": matched, "unmatched": unmatched}

@@ -83,12 +83,14 @@ def send_email(
     return result["id"]
 
 
-def check_inbox(since_timestamp: str, from_email: str = None) -> list:
-    """Search Gmail inbox for messages received since since_timestamp.
+def check_inbox(since_timestamp: str) -> list:
+    """Search Gmail inbox for all messages received since since_timestamp.
+
+    Sender address is not filtered here — matching to specific requests is
+    handled by water_bills.process_inbox_replies().
 
     Args:
         since_timestamp: ISO-format UTC string (e.g. from Supabase updated_at).
-        from_email:      Optional sender address filter.
 
     Returns list of dicts: {id, from, subject, date, body, has_attachments}.
     """
@@ -101,8 +103,6 @@ def check_inbox(since_timestamp: str, from_email: str = None) -> list:
             query_parts.append(f"after:{dt.strftime('%Y/%m/%d')}")
         except (ValueError, AttributeError):
             pass
-    if from_email:
-        query_parts.append(f"from:{from_email}")
 
     try:
         list_result = service.users().messages().list(

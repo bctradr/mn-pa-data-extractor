@@ -22,6 +22,7 @@ from water_bills import (
     cancel_request,
     complete_request,
     compose_water_bill_email,
+    process_inbox_replies,
 )
 from gmail_client import send_email, check_inbox
 from ui_theme import apply_theme, section_header, section_bar
@@ -562,38 +563,59 @@ with right_col:
                             st.session_state.pop(f"wb_show_send_{rid}", None)
                             st.rerun()
 
-    # Check for Replies (sent / follow_up_sent + email method + email address on file)
-    if (
-        _is_email
-        and _muni_email
-        and detail.get("status") in ("sent", "follow_up_sent")
-    ):
+    # Check for Replies (email method, sent or follow_up_sent)
+    if _is_email and detail.get("status") in ("sent", "follow_up_sent"):
         st.markdown("")
         section_header("Check for Replies")
         with st.container(border=True):
-            st.caption(f"Searches inbox for messages from {_muni_email} since last update.")
+            st.caption("Scans inbox since last update and matches messages to requests by file number or address.")
             if st.button("🔍 Check for Replies", key=f"wb_check_replies_{rid}"):
                 try:
-                    messages = check_inbox(
-                        since_timestamp=detail.get("updated_at", ""),
-                        from_email=_muni_email,
-                    )
-                    st.session_state[f"wb_replies_{rid}"] = messages
+                    messages = check_inbox(since_timestamp=detail.get("updated_at", ""))
+                    results  = process_inbox_replies(messages)
+                    st.session_state[f"wb_replies_{rid}"] = results
                 except Exception as e:
                     st.error(f"Inbox check failed: {e}")
-            replies = st.session_state.get(f"wb_replies_{rid}")
-            if replies is not None:
-                if replies:
-                    st.caption(f"Found {len(replies)} message(s):")
-                    for m in replies:
-                        st.markdown(f"**{m['subject'] or '(no subject)'}** — {m['from']}")
-                        st.caption(m["date"] + (" 📎 has attachment" if m.get("has_attachments") else ""))
-                        if m.get("body"):
+
+            results = st.session_state.get(f"wb_replies_{rid}")
+            if results is not None:
+                this_request_matches = [
+                    m for m in results.get("matched", []) if m["request_id"] == rid
+                ]
+                other_matches = [
+                    m for m in results.get("matched", []) if m["request_id"] != rid
+                ]
+                unmatched = results.get("unmatched", [])
+
+                if this_request_matches:
+                    st.caption(f"**{len(this_request_matches)} message(s) matched to this request** and logged as followup notes:")
+                    for m in this_request_matches:
+                        signal_label = m["signal"].replace("_", " ")
+                        class_label  = m["classification"].replace("_", " ")
+                        msg = m["message"]
+                        st.markdown(
+                            f"**{msg.get('subject') or '(no subject)'}** — {msg.get('from', '—')}  \n"
+                            f"Matched on: {signal_label} · Type: {class_label}"
+                            + (" 📎" if msg.get("has_attachments") else "")
+                        )
+                        st.caption(msg.get("date", ""))
+                        if msg.get("body"):
                             with st.expander("Show message"):
-                                st.text(m["body"][:3000])
+                                st.text(msg["body"][:3000])
                         st.divider()
                 else:
-                    st.caption("No replies found since the last send.")
+                    st.caption("No replies matched to this request.")
+
+                if other_matches:
+                    st.caption(
+                        f"{len(other_matches)} message(s) matched to other request(s) and logged there: "
+                        + ", ".join(
+                            m.get("file_number") or m.get("property_address") or m["request_id"]
+                            for m in other_matches
+                        )
+                    )
+                if unmatched:
+                    st.caption(f"{len(unmatched)} message(s) could not be matched to any request and were stored in the unmatched log.")
 
     # Mark Received (not applicable once received, cancelled, or completed)
     if detail.get("status") not in ("received", "cancelled", "completed"):
