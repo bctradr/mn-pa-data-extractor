@@ -27,7 +27,36 @@ _ACTION_TO_STATUS = {
     "phone_call": "follow_up_sent",
     "received":   "received",
     "note":       None,
+    "cancelled":  "cancelled",
+    "completed":  "completed",
 }
+
+
+def calculate_send_by_date(closing_date, municipality_id: str = None) -> tuple:
+    """Calculate send_by_date and lead_time_days_used from a closing date.
+
+    Returns (send_by_date: date, lead_time_days_used: int), or (None, None)
+    if closing_date is None. Queries municipalities.lead_time_days when
+    municipality_id is provided and the column is set; falls back to
+    GLOBAL_LEAD_TIME_DAYS otherwise. Works with date objects; callers handle
+    ISO string conversion at their boundaries.
+    """
+    if closing_date is None:
+        return (None, None)
+    lead_time = GLOBAL_LEAD_TIME_DAYS
+    if municipality_id:
+        sb = get_supabase()
+        muni_result = (
+            sb.table("municipalities")
+            .select("lead_time_days")
+            .eq("id", municipality_id)
+            .single()
+            .execute()
+        )
+        muni_lead = (muni_result.data or {}).get("lead_time_days")
+        if muni_lead is not None:
+            lead_time = muni_lead
+    return (closing_date - timedelta(days=lead_time), lead_time)
 
 
 def get_municipalities() -> list:
@@ -80,31 +109,13 @@ def create_request_from_order(order_id: str, order_data: dict) -> dict:
     closing_date_str = dates.get("closing_date")
     municipality_id = None  # Phase 2: derive from order/property lookup
 
-    # Calculate send_by_date from closing date minus lead time.
-    # Uses municipality-specific lead_time_days if a municipality_id is set,
-    # falling back to GLOBAL_LEAD_TIME_DAYS.
-    send_by_date = None
-    lead_time_days_used = None
+    closing_date_obj = None
     if closing_date_str:
         try:
-            closing = date.fromisoformat(closing_date_str)
-            lead_time = GLOBAL_LEAD_TIME_DAYS
-            if municipality_id:
-                sb = get_supabase()
-                muni_result = (
-                    sb.table("municipalities")
-                    .select("lead_time_days")
-                    .eq("id", municipality_id)
-                    .single()
-                    .execute()
-                )
-                muni_lead = (muni_result.data or {}).get("lead_time_days")
-                if muni_lead is not None:
-                    lead_time = muni_lead
-            send_by_date = (closing - timedelta(days=lead_time)).isoformat()
-            lead_time_days_used = lead_time
+            closing_date_obj = date.fromisoformat(closing_date_str)
         except (ValueError, TypeError):
             pass
+    send_by, lead_time_used = calculate_send_by_date(closing_date_obj, municipality_id)
 
     data = {
         "order_id":            order_id,
@@ -113,8 +124,8 @@ def create_request_from_order(order_id: str, order_data: dict) -> dict:
         "current_owners":      current_owners or None,
         "new_buyers":          new_buyers or None,
         "closing_date":        closing_date_str,
-        "send_by_date":        send_by_date,
-        "lead_time_days_used": lead_time_days_used,
+        "send_by_date":        send_by.isoformat() if send_by else None,
+        "lead_time_days_used": lead_time_used,
         "municipality_id":     municipality_id,
         "closer_name":         order_data.get("closer"),
         "closer_email":        None,
@@ -227,6 +238,50 @@ def log_followup(
         update_status(request_id, new_status)
 
     return result.data[0]
+
+
+def cancel_request(request_id: str, reason: str, logged_by: str) -> dict:
+    """Log a cancellation and set the request status to 'cancelled'.
+
+    Raises ValueError if reason is empty or whitespace.
+    """
+    if not reason or not reason.strip():
+        raise ValueError("Cancellation reason is required.")
+    return log_followup(
+        request_id=request_id,
+        action="cancelled",
+        method=None,
+        notes=reason.strip(),
+        logged_by=logged_by,
+    )
+
+
+def complete_request(request_id: str, logged_by: str, notes: str = None) -> dict:
+    """Log completion and set the request status to 'completed'.
+
+    Only callable when the current status is 'received'; raises ValueError otherwise.
+    """
+    sb = get_supabase()
+    current = (
+        sb.table("water_bill_requests")
+        .select("status")
+        .eq("id", request_id)
+        .single()
+        .execute()
+    )
+    current_status = (current.data or {}).get("status")
+    if current_status != "received":
+        raise ValueError(
+            f"Cannot complete a request with status '{current_status}' — "
+            "must be 'received' first."
+        )
+    return log_followup(
+        request_id=request_id,
+        action="completed",
+        method=None,
+        notes=notes or None,
+        logged_by=logged_by,
+    )
 
 
 def upload_bill_pdf(request_id: str, file_bytes: bytes, filename: str) -> str:

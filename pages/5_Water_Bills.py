@@ -17,6 +17,9 @@ from water_bills import (
     log_followup,
     upload_bill_pdf,
     get_bill_pdf_url,
+    calculate_send_by_date,
+    cancel_request,
+    complete_request,
 )
 from ui_theme import apply_theme, section_header, section_bar
 
@@ -34,8 +37,10 @@ _STATUS_LABELS = {
     "sent":           "🔵 Sent",
     "follow_up_sent": "🟠 Follow-up Sent",
     "received":       "🟢 Received",
+    "cancelled":      "🔴 Cancelled",
+    "completed":      "✅ Completed",
 }
-_STATUSES = ["pending", "sent", "follow_up_sent", "received"]
+_STATUSES = ["pending", "sent", "follow_up_sent", "received", "cancelled", "completed"]
 _ACTIONS  = ["sent", "follow_up", "phone_call", "received", "note"]
 _METHODS  = ["email", "fax", "phone", "portal"]
 
@@ -132,23 +137,26 @@ if st.session_state.wb_show_form:
             save_new = st.form_submit_button("💾 Save Request", type="primary")
 
         if save_new:
+            sbd_new, ltd_new = calculate_send_by_date(closing_date_new, muni_id)
             try:
                 create_request({
-                    "file_number":       file_number or None,
-                    "property_address":  property_address or None,
-                    "current_owners":    current_owners or None,
-                    "new_buyers":        new_buyers or None,
-                    "closing_date":      closing_date_new.isoformat() if closing_date_new else None,
-                    "municipality_id":   muni_id,
-                    "municipality_name": muni_name,
-                    "request_method":    req_method or None,
-                    "closer_name":       closer_name or None,
-                    "closer_email":      closer_email or None,
-                    "closer_phone":      closer_phone or None,
-                    "assistant_name":    asst_name or None,
-                    "assistant_email":   asst_email or None,
-                    "assistant_phone":   asst_phone or None,
-                    "notes":             notes_new or None,
+                    "file_number":         file_number or None,
+                    "property_address":    property_address or None,
+                    "current_owners":      current_owners or None,
+                    "new_buyers":          new_buyers or None,
+                    "closing_date":        closing_date_new.isoformat() if closing_date_new else None,
+                    "send_by_date":        sbd_new.isoformat() if sbd_new else None,
+                    "lead_time_days_used": ltd_new,
+                    "municipality_id":     muni_id,
+                    "municipality_name":   muni_name,
+                    "request_method":      req_method or None,
+                    "closer_name":         closer_name or None,
+                    "closer_email":        closer_email or None,
+                    "closer_phone":        closer_phone or None,
+                    "assistant_name":      asst_name or None,
+                    "assistant_email":     asst_email or None,
+                    "assistant_phone":     asst_phone or None,
+                    "notes":               notes_new or None,
                 })
                 st.success("Request created.")
                 st.session_state.wb_show_form = False
@@ -198,7 +206,8 @@ if not requests:
 
 today = date.today()
 rows = []
-raw_send_by = []  # parallel list used for row styling; not shown directly
+raw_send_by = []  # parallel lists for row styling; not shown directly
+raw_status = []
 for r in requests:
     sbd_str = r.get("send_by_date")
     sbd = None
@@ -208,6 +217,7 @@ for r in requests:
         except (ValueError, TypeError):
             pass
     raw_send_by.append(sbd)
+    raw_status.append(r.get("status", ""))
     rows.append({
         "File #":       r.get("file_number") or "—",
         "Address":      r.get("property_address") or "—",
@@ -224,7 +234,8 @@ df = pd.DataFrame(rows)
 
 def _highlight_rows(row):
     sbd = raw_send_by[row.name]
-    if sbd is None:
+    status = raw_status[row.name]
+    if sbd is None or status in ("cancelled", "completed"):
         return [""] * len(row)
     if sbd < today:
         return ["background-color: #ffd5d5"] * len(row)   # red — overdue
@@ -287,6 +298,18 @@ with dc_col:
     if st.button("✕ Close", key="wb_close_detail"):
         st.session_state.wb_selected_id = None
         st.rerun()
+
+# Terminal-state banner
+_terminal_followup = next(
+    (f for f in detail.get("followups", []) if f.get("action") in ("cancelled", "completed")),
+    None,
+)
+if detail.get("status") == "cancelled":
+    _reason = (_terminal_followup or {}).get("notes") or ""
+    st.error("🔴 **Cancelled**" + (f" — {_reason}" if _reason else ""))
+elif detail.get("status") == "completed":
+    _comp_notes = (_terminal_followup or {}).get("notes") or ""
+    st.success("✅ **Completed**" + (f" — {_comp_notes}" if _comp_notes else ""))
 
 left_col, right_col = st.columns(2)
 
@@ -412,8 +435,38 @@ with right_col:
                 except Exception as e:
                     st.error(f"Log failed: {e}")
 
-    # Mark Received
-    if detail.get("status") != "received":
+    # Send Now (pending only — fast-path to 'sent' without the full Log Action form)
+    if detail.get("status") == "pending":
+        st.markdown("")
+        section_header("Send Now")
+        with st.container(border=True):
+            if st.button("📤 Send Now", key=f"wb_send_btn_{rid}", type="primary"):
+                st.session_state[f"wb_show_send_{rid}"] = True
+            if st.session_state.get(f"wb_show_send_{rid}"):
+                send_notes_in   = st.text_input("Notes", value="Sent manually", key=f"wb_send_notes_{rid}")
+                send_by_name_in = st.text_input("Your initials / name", key=f"wb_send_by_{rid}")
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    if st.button("Confirm Send", key=f"wb_send_confirm_{rid}", type="primary"):
+                        try:
+                            log_followup(
+                                request_id=rid,
+                                action="sent",
+                                method=detail.get("request_method") or "",
+                                notes=send_notes_in or "Sent manually",
+                                logged_by=send_by_name_in,
+                            )
+                            st.session_state.pop(f"wb_show_send_{rid}", None)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                with sc2:
+                    if st.button("Never mind", key=f"wb_send_dismiss_{rid}"):
+                        st.session_state.pop(f"wb_show_send_{rid}", None)
+                        st.rerun()
+
+    # Mark Received (not applicable once received, cancelled, or completed)
+    if detail.get("status") not in ("received", "cancelled", "completed"):
         st.markdown("")
         section_header("Mark Received")
         with st.container(border=True):
@@ -431,6 +484,32 @@ with right_col:
                     except Exception as e:
                         st.error(f"Upload failed: {e}")
 
+    # Mark Completed (received only)
+    if detail.get("status") == "received":
+        st.markdown("")
+        section_header("Mark Completed")
+        with st.container(border=True):
+            if st.button("✅ Mark Completed", key=f"wb_complete_btn_{rid}", type="primary"):
+                st.session_state[f"wb_show_complete_{rid}"] = True
+            if st.session_state.get(f"wb_show_complete_{rid}"):
+                complete_notes_in = st.text_area("Notes (optional)", height=68, key=f"wb_complete_notes_{rid}")
+                complete_by_in    = st.text_input("Your initials / name", key=f"wb_complete_by_{rid}")
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    if st.button("Confirm Complete", key=f"wb_complete_confirm_{rid}", type="primary"):
+                        try:
+                            complete_request(rid, complete_by_in, complete_notes_in or None)
+                            st.session_state.pop(f"wb_show_complete_{rid}", None)
+                            st.rerun()
+                        except ValueError as e:
+                            st.error(str(e))
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                with cc2:
+                    if st.button("Never mind", key=f"wb_complete_dismiss_{rid}"):
+                        st.session_state.pop(f"wb_show_complete_{rid}", None)
+                        st.rerun()
+
     # Download Bill
     if detail.get("bill_pdf_path"):
         st.markdown("")
@@ -446,3 +525,29 @@ with right_col:
             if cached_url:
                 st.link_button("📄 Open Bill PDF (60-min link)", cached_url)
                 st.caption("Link expires in 60 minutes.")
+
+    # Cancel Request (visible unless already in a terminal state)
+    if detail.get("status") not in ("cancelled", "completed"):
+        st.markdown("")
+        section_header("Cancel Request")
+        with st.container(border=True):
+            if st.button("🚫 Cancel Request", key=f"wb_cancel_btn_{rid}"):
+                st.session_state[f"wb_show_cancel_{rid}"] = True
+            if st.session_state.get(f"wb_show_cancel_{rid}"):
+                cancel_reason_in = st.text_area("Reason (required)", height=68, key=f"wb_cancel_reason_{rid}")
+                cancel_by_in     = st.text_input("Your initials / name", key=f"wb_cancel_by_{rid}")
+                xc1, xc2 = st.columns(2)
+                with xc1:
+                    if st.button("Confirm Cancel", key=f"wb_cancel_confirm_{rid}", type="primary"):
+                        try:
+                            cancel_request(rid, cancel_reason_in, cancel_by_in)
+                            st.session_state.pop(f"wb_show_cancel_{rid}", None)
+                            st.rerun()
+                        except ValueError as e:
+                            st.error(str(e))
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                with xc2:
+                    if st.button("Never mind", key=f"wb_cancel_dismiss_{rid}"):
+                        st.session_state.pop(f"wb_show_cancel_{rid}", None)
+                        st.rerun()
