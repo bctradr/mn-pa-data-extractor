@@ -27,11 +27,13 @@ GAZETTEER_URL = (
     "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/"
     "2024_Gazetteer/2024_Gaz_place_national.zip"
 )
-TARGET_STATES = {"MN", "WI"}
+TARGET_STATES = {"WI"}   # MN already seeded correctly; only fixing WI
 BATCH_SIZE = 500
 
+# "town" intentionally excluded: WI civil towns ("Green Bay town") are distinct
+# incorporated entities and must not collapse onto the same name as "Green Bay city".
 _SUFFIX_RE = re.compile(
-    r"\s+(city|village|town|township|CDP|borough|plantation|grant|location|"
+    r"\s+(city|village|township|CDP|borough|plantation|grant|location|"
     r"unorganized territory|reservation|community|municipality|"
     r"consolidated government \(balance\)|urban county|"
     r"metro government \(balance\)|metropolitan government \(balance\)|"
@@ -44,10 +46,11 @@ def clean_name(raw: str) -> str:
     return _SUFFIX_RE.sub("", raw.strip())
 
 
-st.title("🔧 Admin: Seed Municipalities")
+st.title("🔧 Admin: Seed Municipalities (WI re-seed)")
 st.warning(
-    "**One-time setup tool.** Delete `pages/9_Admin_Seed_Municipalities.py` "
-    "after seeding is complete. Safe to re-run — existing rows are skipped.",
+    "**Round-2 WI fix.** Re-parses WI with corrected suffix regex (no 'town' stripping). "
+    "Inserts new WI rows only — MN and legacy rows untouched. "
+    "Delete this page after confirming the WI count.",
     icon="⚠️",
 )
 

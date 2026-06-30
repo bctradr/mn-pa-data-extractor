@@ -27,8 +27,10 @@ TARGET_STATES = {"MN", "WI"}
 BATCH_SIZE = 500
 
 # Strip legal suffix that Census appends to every place name.
+# "town" intentionally excluded: WI civil towns ("Green Bay town") are distinct
+# incorporated entities and must not collapse onto the same name as "Green Bay city".
 _SUFFIX_RE = re.compile(
-    r"\s+(city|village|town|township|CDP|borough|plantation|grant|location|"
+    r"\s+(city|village|township|CDP|borough|plantation|grant|location|"
     r"unorganized territory|reservation|community|municipality|"
     r"consolidated government \(balance\)|urban county|"
     r"metro government \(balance\)|metropolitan government \(balance\)|"
