@@ -80,6 +80,29 @@ def count_all_by_state(sb):
     return counts
 
 
+def count_wi_by_type(sb):
+    """Count WI rows by type prefix in notes (City / Village / Town)."""
+    counts = {}
+    page_size = 1000
+    page = 0
+    while True:
+        result = (
+            sb.table("municipalities")
+            .select("notes")
+            .eq("state", "WI")
+            .range(page * page_size, (page + 1) * page_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        for r in batch:
+            n = (r.get("notes") or "").split(",")[0].strip() or "(none)"
+            counts[n] = counts.get(n, 0) + 1
+        if len(batch) < page_size:
+            break
+        page += 1
+    return counts
+
+
 def build_notes(row_type: str, county: str) -> str:
     t = (row_type or "").strip().title()
     c = (county or "").strip()
@@ -134,12 +157,18 @@ if st.button("▶️ Run Import", type="primary"):
         to_insert = []
         skipped = 0
         for row in csv_rows:
-            name   = (row.get("name") or "").strip()
-            state  = (row.get("state") or "WI").strip()
-            rtype  = (row.get("type") or "").strip()
-            county = (row.get("county") or "").strip()
-            if not name:
+            raw_name = (row.get("name") or "").strip()
+            state    = (row.get("state") or "WI").strip()
+            rtype    = (row.get("type") or "").strip().lower()
+            county   = (row.get("county") or "").strip()
+            if not raw_name:
                 continue
+            # Towns share names across counties and with cities/villages.
+            # Embed county in the stored name so every (name, state) is unique.
+            if rtype == "town" and county:
+                name = f"{raw_name} ({county} County)"
+            else:
+                name = raw_name
             if (name, state) in existing:
                 skipped += 1
                 continue
@@ -175,6 +204,13 @@ if st.button("▶️ Run Import", type="primary"):
     count_rows = [{"State": s, "Count": c} for s, c in sorted(counts.items())]
     count_rows.append({"State": "TOTAL", "Count": sum(counts.values())})
     st.dataframe(pd.DataFrame(count_rows), hide_index=True, use_container_width=False)
+
+    # WI breakdown by type (from notes prefix)
+    st.subheader("WI breakdown by type")
+    wi_type_counts = count_wi_by_type(sb)
+    wi_rows = [{"Type": t, "Count": c} for t, c in sorted(wi_type_counts.items())]
+    wi_rows.append({"Type": "TOTAL", "Count": sum(wi_type_counts.values())})
+    st.dataframe(pd.DataFrame(wi_rows), hide_index=True, use_container_width=False)
 
     st.success(
         "✅ Import complete. Confirm the counts above look right, "
