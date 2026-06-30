@@ -66,6 +66,29 @@ def get_municipalities() -> list:
     return result.data or []
 
 
+def create_municipality(data: dict) -> dict:
+    """Insert a new municipality row. Returns the created record."""
+    sb = get_supabase()
+    result = sb.table("municipalities").insert(data).execute()
+    if not result.data:
+        raise RuntimeError("municipalities insert returned no data.")
+    return result.data[0]
+
+
+def update_municipality(muni_id: str, data: dict) -> dict:
+    """Update fields on a municipality. Returns the updated record."""
+    sb = get_supabase()
+    result = (
+        sb.table("municipalities")
+        .update(data)
+        .eq("id", muni_id)
+        .execute()
+    )
+    if not result.data:
+        raise RuntimeError(f"Update returned no data for municipality {muni_id}.")
+    return result.data[0]
+
+
 def create_request(data: dict) -> dict:
     """Insert a new water bill request row. Returns the created record."""
     sb = get_supabase()

@@ -10,6 +10,7 @@ from datetime import date
 
 from water_bills import (
     get_municipalities,
+    create_municipality,
     create_request,
     get_requests,
     get_request,
@@ -47,6 +48,11 @@ _METHODS  = ["email", "fax", "phone", "portal"]
 
 def _status_label(s: str) -> str:
     return _STATUS_LABELS.get(s, s or "—")
+
+
+def _muni_label(m: dict) -> str:
+    state = m.get("state")
+    return f"{m['name']}, {state}" if state else m["name"]
 
 
 def _fmt_ts(ts: str) -> str:
@@ -87,10 +93,30 @@ if st.session_state.wb_show_form:
         municipalities = get_municipalities()
     except Exception:
         municipalities = []
-    muni_names = [m["name"] for m in municipalities]
-    muni_map   = {m["name"]: m for m in municipalities}
+    muni_options = [_muni_label(m) for m in municipalities]
+    muni_map     = {_muni_label(m): m for m in municipalities}
 
     with st.expander("➕ New Water Bill Request", expanded=True):
+        with st.expander("➕ City not in list? Add it first", expanded=False):
+            with st.form("wb_quickadd_muni", clear_on_submit=True):
+                qa_c1, qa_c2 = st.columns([3, 1])
+                qa_name  = qa_c1.text_input("Name")
+                qa_state = qa_c2.selectbox("State", ["MN", "WI"])
+                qa_save  = st.form_submit_button("Create", type="primary")
+            if qa_save:
+                if qa_name.strip():
+                    try:
+                        create_municipality({"name": qa_name.strip(), "state": qa_state})
+                        st.success(
+                            f"Created '{qa_name.strip()}, {qa_state}'. "
+                            "Select it in the municipality dropdown below."
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
+                else:
+                    st.error("Name is required.")
+
         section_header("Property & Parties")
         with st.form("wb_new_form", clear_on_submit=True):
             fc1, fc2 = st.columns(2)
@@ -102,23 +128,21 @@ if st.session_state.wb_show_form:
             closing_date_new = st.date_input("Closing Date", value=None)
 
             st.markdown("**Municipality**")
-            mc1, mc2 = st.columns(2)
-            muni_choice = mc1.selectbox(
+            muni_choice = st.selectbox(
                 "Municipality",
-                options=["— enter manually —"] + muni_names,
+                options=["— select municipality —"] + muni_options,
                 label_visibility="collapsed",
             )
-            if muni_choice == "— enter manually —":
-                muni_name_manual = mc2.text_input("Municipality Name")
+            if muni_choice == "— select municipality —":
                 muni_id   = None
-                muni_name = muni_name_manual or None
+                muni_name = None
                 pref_idx  = 0
             else:
-                chosen   = muni_map.get(muni_choice, {})
-                muni_id  = chosen.get("id")
-                muni_name = muni_choice
-                pref     = chosen.get("preferred_method", "email")
-                pref_idx = _METHODS.index(pref) if pref in _METHODS else 0
+                chosen    = muni_map.get(muni_choice, {})
+                muni_id   = chosen.get("id")
+                muni_name = chosen.get("name")
+                pref      = chosen.get("preferred_method") or "email"
+                pref_idx  = _METHODS.index(pref) if pref in _METHODS else 0
 
             req_method = st.selectbox("Request Method", _METHODS, index=pref_idx)
 
@@ -321,11 +345,24 @@ with left_col:
         municipalities_edit = get_municipalities()
     except Exception:
         municipalities_edit = []
-    muni_names_edit = ["— none —"] + [m["name"] for m in municipalities_edit]
-    muni_map_edit   = {m["name"]: m for m in municipalities_edit}
+    muni_labels_edit  = ["— none —"] + [_muni_label(m) for m in municipalities_edit]
+    muni_label_to_obj = {_muni_label(m): m for m in municipalities_edit}
 
-    current_muni    = detail.get("municipality_name") or ""
-    muni_edit_idx   = muni_names_edit.index(current_muni) if current_muni in muni_names_edit else 0
+    # Resolve current selection by ID (preferred) then fall back to name match.
+    _cur_label = None
+    if detail.get("municipality_id"):
+        for _m in municipalities_edit:
+            if _m["id"] == detail["municipality_id"]:
+                _cur_label = _muni_label(_m)
+                break
+    if _cur_label is None and detail.get("municipality_name"):
+        for _m in municipalities_edit:
+            if _m.get("name") == detail["municipality_name"]:
+                _cur_label = _muni_label(_m)
+                break
+    muni_edit_idx = (
+        muni_labels_edit.index(_cur_label) if _cur_label in muni_labels_edit else 0
+    )
     status_edit_idx = _STATUSES.index(detail.get("status", "pending")) if detail.get("status") in _STATUSES else 0
     method_edit_idx = _METHODS.index(detail.get("request_method", "email")) if detail.get("request_method") in _METHODS else 0
 
@@ -348,7 +385,7 @@ with left_col:
             cd_edit   = st.date_input("Closing Date",      value=cd_val)
 
             mu1, mu2 = st.columns(2)
-            muni_edit   = mu1.selectbox("Municipality",    muni_names_edit, index=muni_edit_idx)
+            muni_edit   = mu1.selectbox("Municipality",    muni_labels_edit, index=muni_edit_idx)
             method_edit = mu2.selectbox("Request Method",  _METHODS,        index=method_edit_idx)
             status_edit = st.selectbox(
                 "Status", _STATUSES, index=status_edit_idx, format_func=_status_label
@@ -367,7 +404,7 @@ with left_col:
             save_edit  = st.form_submit_button("💾 Save Changes", type="primary")
 
         if save_edit:
-            chosen_edit = muni_map_edit.get(muni_edit, {})
+            chosen_edit = muni_label_to_obj.get(muni_edit, {})
             try:
                 update_request(rid, {
                     "file_number":       fn_edit or None,
@@ -376,7 +413,7 @@ with left_col:
                     "new_buyers":        buy_edit or None,
                     "closing_date":      cd_edit.isoformat() if cd_edit else None,
                     "municipality_id":   chosen_edit.get("id"),
-                    "municipality_name": muni_edit if muni_edit != "— none —" else None,
+                    "municipality_name": chosen_edit.get("name") if muni_edit != "— none —" else None,
                     "request_method":    method_edit,
                     "status":            status_edit,
                     "closer_name":       cln_edit or None,
