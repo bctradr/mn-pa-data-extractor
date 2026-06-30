@@ -196,21 +196,46 @@ if not requests:
     st.info("No requests match the current filters.")
     st.stop()
 
+today = date.today()
 rows = []
+raw_send_by = []  # parallel list used for row styling; not shown directly
 for r in requests:
+    sbd_str = r.get("send_by_date")
+    sbd = None
+    if sbd_str:
+        try:
+            sbd = date.fromisoformat(sbd_str)
+        except (ValueError, TypeError):
+            pass
+    raw_send_by.append(sbd)
     rows.append({
         "File #":       r.get("file_number") or "—",
         "Address":      r.get("property_address") or "—",
         "Municipality": r.get("municipality_name") or "—",
         "Method":       r.get("request_method") or "—",
         "Status":       _status_label(r.get("status", "")),
+        "Send By":      sbd.isoformat() if sbd else "—",
         "Closing":      r.get("closing_date") or "—",
         "Updated":      _fmt_ts(r.get("updated_at", "")),
     })
 
-st.caption("Click a row to open the detail panel.")
+df = pd.DataFrame(rows)
+
+
+def _highlight_rows(row):
+    sbd = raw_send_by[row.name]
+    if sbd is None:
+        return [""] * len(row)
+    if sbd < today:
+        return ["background-color: #ffd5d5"] * len(row)   # red — overdue
+    if sbd == today:
+        return ["background-color: #fff3cd"] * len(row)   # amber — due today
+    return [""] * len(row)
+
+
+st.caption("Click a row to open the detail panel. 🔴 overdue · 🟠 due today")
 selection = st.dataframe(
-    pd.DataFrame(rows),
+    df.style.apply(_highlight_rows, axis=1),
     use_container_width=True,
     hide_index=True,
     on_select="rerun",
@@ -219,6 +244,7 @@ selection = st.dataframe(
         "Address":      st.column_config.TextColumn(width="large"),
         "Municipality": st.column_config.TextColumn(width="medium"),
         "Status":       st.column_config.TextColumn(width="medium"),
+        "Send By":      st.column_config.TextColumn(width="small"),
     },
 )
 

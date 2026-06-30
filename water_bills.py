@@ -13,10 +13,11 @@ All Supabase calls use get_supabase() from supabase_client.py.
 Outbound sending (email via MS Graph, fax via Phaxio) is deferred to Phase 2.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from supabase_client import get_supabase
 
 WATER_BILLS_BUCKET = "water-bills"
+GLOBAL_LEAD_TIME_DAYS = 7
 
 # Maps followup action → resulting request status.
 # 'note' entries are logged without changing the parent status.
@@ -76,21 +77,53 @@ def create_request_from_order(order_id: str, order_data: dict) -> dict:
     sellers = extracted.get("parties", {}).get("sellers", [])
     current_owners = "; ".join(s.get("name", "") for s in sellers if s.get("name"))
 
+    closing_date_str = dates.get("closing_date")
+    municipality_id = None  # Phase 2: derive from order/property lookup
+
+    # Calculate send_by_date from closing date minus lead time.
+    # Uses municipality-specific lead_time_days if a municipality_id is set,
+    # falling back to GLOBAL_LEAD_TIME_DAYS.
+    send_by_date = None
+    lead_time_days_used = None
+    if closing_date_str:
+        try:
+            closing = date.fromisoformat(closing_date_str)
+            lead_time = GLOBAL_LEAD_TIME_DAYS
+            if municipality_id:
+                sb = get_supabase()
+                muni_result = (
+                    sb.table("municipalities")
+                    .select("lead_time_days")
+                    .eq("id", municipality_id)
+                    .single()
+                    .execute()
+                )
+                muni_lead = (muni_result.data or {}).get("lead_time_days")
+                if muni_lead is not None:
+                    lead_time = muni_lead
+            send_by_date = (closing - timedelta(days=lead_time)).isoformat()
+            lead_time_days_used = lead_time
+        except (ValueError, TypeError):
+            pass
+
     data = {
-        "order_id":         order_id,
-        "file_number":      None,
-        "property_address": property_address or None,
-        "current_owners":   current_owners or None,
-        "new_buyers":       new_buyers or None,
-        "closing_date":     dates.get("closing_date"),
-        "closer_name":      order_data.get("closer"),
-        "closer_email":     None,
-        "closer_phone":     None,
-        "assistant_name":   order_data.get("assistant_main_contact"),
-        "assistant_email":  None,
-        "assistant_phone":  None,
-        "notes":            None,
-        "status":           "pending",
+        "order_id":            order_id,
+        "file_number":         None,
+        "property_address":    property_address or None,
+        "current_owners":      current_owners or None,
+        "new_buyers":          new_buyers or None,
+        "closing_date":        closing_date_str,
+        "send_by_date":        send_by_date,
+        "lead_time_days_used": lead_time_days_used,
+        "municipality_id":     municipality_id,
+        "closer_name":         order_data.get("closer"),
+        "closer_email":        None,
+        "closer_phone":        None,
+        "assistant_name":      order_data.get("assistant_main_contact"),
+        "assistant_email":     None,
+        "assistant_phone":     None,
+        "notes":               None,
+        "status":              "pending",
     }
     return create_request(data)
 

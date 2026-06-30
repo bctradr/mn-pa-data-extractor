@@ -15,6 +15,7 @@ create table if not exists municipalities (
     fax              text,
     portal_url       text,
     notes            text,
+    lead_time_days   integer,               -- business days before closing to send request
     created_at       timestamptz not null default now()
 );
 
@@ -30,7 +31,9 @@ create table if not exists water_bill_requests (
     property_address   text,
     current_owners     text,
     new_buyers         text,
-    closing_date       date,
+    closing_date           date,
+    send_by_date           date,       -- closing_date minus lead_time_days; set at creation
+    lead_time_days_used    integer,    -- lead time value applied when send_by_date was calculated
     municipality_id    uuid        references municipalities(id) on delete set null,
     municipality_name  text,       -- denormalized so rows survive municipality edits
     request_method     text,       -- email | fax | phone | portal
