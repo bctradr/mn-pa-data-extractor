@@ -353,3 +353,65 @@ def get_bill_pdf_url(bill_pdf_path: str) -> str:
             or ""
         )
     return getattr(result, "signed_url", "") or ""
+
+
+def compose_water_bill_email(request: dict) -> tuple:
+    """Compose subject and body for an outbound water bill request email.
+
+    Returns (subject: str, body: str).
+    """
+    muni = request.get("municipalities") or {}
+    muni_name = request.get("municipality_name") or muni.get("name") or "Municipality"
+    address = request.get("property_address") or "—"
+    closing = request.get("closing_date") or "—"
+    owners = request.get("current_owners") or "—"
+    buyers = request.get("new_buyers") or "—"
+    file_num = request.get("file_number") or "—"
+
+    closer_name  = request.get("closer_name") or ""
+    closer_email = request.get("closer_email") or ""
+    closer_phone = request.get("closer_phone") or ""
+    asst_name    = request.get("assistant_name") or ""
+    asst_email   = request.get("assistant_email") or ""
+    asst_phone   = request.get("assistant_phone") or ""
+
+    contact_lines = []
+    if closer_name:
+        parts = [closer_name]
+        if closer_email:
+            parts.append(closer_email)
+        if closer_phone:
+            parts.append(closer_phone)
+        contact_lines.append("Closer: " + " | ".join(parts))
+    if asst_name:
+        parts = [asst_name]
+        if asst_email:
+            parts.append(asst_email)
+        if asst_phone:
+            parts.append(asst_phone)
+        contact_lines.append("Assistant: " + " | ".join(parts))
+    contact_block = "\n".join(contact_lines) if contact_lines else "See reply address above."
+
+    subject = f"Water Bill Request — {address} — Closing {closing}"
+
+    body = f"""\
+Dear {muni_name} Water Department,
+
+We are requesting the current water/utility bill balance for the following property \
+in connection with an upcoming real estate closing:
+
+  Property Address : {address}
+  Current Owners   : {owners}
+  New Buyers       : {buyers}
+  Closing Date     : {closing}
+  File Number      : {file_num}
+
+Please reply to this email with the current outstanding balance as soon as possible. \
+If a payoff statement or final bill is available, please include it as well.
+
+Contact information:
+{contact_block}
+
+Thank you for your assistance.
+"""
+    return subject, body

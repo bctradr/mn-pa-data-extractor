@@ -21,7 +21,9 @@ from water_bills import (
     calculate_send_by_date,
     cancel_request,
     complete_request,
+    compose_water_bill_email,
 )
+from gmail_client import send_email, check_inbox
 from ui_theme import apply_theme, section_header, section_bar
 
 try:
@@ -307,6 +309,10 @@ except Exception as e:
     st.error(f"Failed to load request: {e}")
     st.stop()
 
+_muni_data  = detail.get("municipalities") or {}
+_muni_email = (_muni_data.get("email") or "").strip()
+_is_email   = detail.get("request_method") == "email"
+
 st.divider()
 
 dh_col, dc_col = st.columns([8, 1])
@@ -472,35 +478,122 @@ with right_col:
                 except Exception as e:
                     st.error(f"Log failed: {e}")
 
-    # Send Now (pending only — fast-path to 'sent' without the full Log Action form)
+    # Send Now (pending only)
     if detail.get("status") == "pending":
         st.markdown("")
         section_header("Send Now")
         with st.container(border=True):
-            if st.button("📤 Send Now", key=f"wb_send_btn_{rid}", type="primary"):
-                st.session_state[f"wb_show_send_{rid}"] = True
-            if st.session_state.get(f"wb_show_send_{rid}"):
-                send_notes_in   = st.text_input("Notes", value="Sent manually", key=f"wb_send_notes_{rid}")
-                send_by_name_in = st.text_input("Your initials / name", key=f"wb_send_by_{rid}")
-                sc1, sc2 = st.columns(2)
-                with sc1:
-                    if st.button("Confirm Send", key=f"wb_send_confirm_{rid}", type="primary"):
-                        try:
-                            log_followup(
-                                request_id=rid,
-                                action="sent",
-                                method=detail.get("request_method") or "",
-                                notes=send_notes_in or "Sent manually",
-                                logged_by=send_by_name_in,
-                            )
+            # DEBUG — remove after confirming
+            st.write("DEBUG request_method:", repr(detail.get("request_method")))
+            st.write("DEBUG _is_email:", _is_email)
+            st.write("DEBUG _muni_email:", repr(_muni_email))
+            st.write("DEBUG wb_show_send set:", st.session_state.get(f"wb_show_send_{rid}", False))
+            if _is_email:
+                # Email path — always show Send Review popup; To field editable with muni email pre-filled
+                if st.button("📤 Send Email Now", key=f"wb_send_btn_{rid}", type="primary"):
+                    st.session_state[f"wb_show_send_{rid}"] = True
+                if st.session_state.get(f"wb_show_send_{rid}"):
+                    _subject, _body = compose_water_bill_email(detail)
+                    st.markdown("**Send Review**")
+                    if not _muni_email:
+                        st.warning(
+                            "No email on file for this municipality. "
+                            "Add one in Manage Municipalities, or enter an address manually below before sending."
+                        )
+                    to_addr = st.text_input(
+                        "To",
+                        value=_muni_email,
+                        key=f"wb_send_to_{rid}",
+                        placeholder="municipality@city.gov",
+                    )
+                    st.caption(f"**Subject:** {_subject}")
+                    with st.expander("Preview email body", expanded=True):
+                        st.text(_body)
+                    send_notes_in   = st.text_input("Notes (optional)", key=f"wb_send_notes_{rid}")
+                    send_by_name_in = st.text_input("Your initials / name", key=f"wb_send_by_{rid}")
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        if st.button("📤 Send Email", key=f"wb_send_confirm_{rid}", type="primary"):
+                            if not to_addr or "@" not in to_addr:
+                                st.error("Enter a valid recipient email address in the To field.")
+                            else:
+                                try:
+                                    send_email(to=to_addr, subject=_subject, body=_body)
+                                    log_followup(
+                                        request_id=rid,
+                                        action="sent",
+                                        method="email",
+                                        notes=send_notes_in or f"Sent via Gmail to {to_addr}",
+                                        logged_by=send_by_name_in,
+                                    )
+                                    st.session_state.pop(f"wb_show_send_{rid}", None)
+                                    st.success(f"Email sent to {to_addr}.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Send failed: {e}")
+                    with sc2:
+                        if st.button("Never mind", key=f"wb_send_dismiss_{rid}"):
                             st.session_state.pop(f"wb_show_send_{rid}", None)
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed: {e}")
-                with sc2:
-                    if st.button("Never mind", key=f"wb_send_dismiss_{rid}"):
-                        st.session_state.pop(f"wb_show_send_{rid}", None)
-                        st.rerun()
+            else:
+                # Non-email method — manual log only
+                if st.button("📤 Mark as Sent", key=f"wb_send_btn_{rid}", type="primary"):
+                    st.session_state[f"wb_show_send_{rid}"] = True
+                if st.session_state.get(f"wb_show_send_{rid}"):
+                    send_notes_in   = st.text_input("Notes", value="Sent manually", key=f"wb_send_notes_{rid}")
+                    send_by_name_in = st.text_input("Your initials / name", key=f"wb_send_by_{rid}")
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        if st.button("Confirm Send", key=f"wb_send_confirm_{rid}", type="primary"):
+                            try:
+                                log_followup(
+                                    request_id=rid,
+                                    action="sent",
+                                    method=detail.get("request_method") or "",
+                                    notes=send_notes_in or "Sent manually",
+                                    logged_by=send_by_name_in,
+                                )
+                                st.session_state.pop(f"wb_show_send_{rid}", None)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+                    with sc2:
+                        if st.button("Never mind", key=f"wb_send_dismiss_{rid}"):
+                            st.session_state.pop(f"wb_show_send_{rid}", None)
+                            st.rerun()
+
+    # Check for Replies (sent / follow_up_sent + email method + email address on file)
+    if (
+        _is_email
+        and _muni_email
+        and detail.get("status") in ("sent", "follow_up_sent")
+    ):
+        st.markdown("")
+        section_header("Check for Replies")
+        with st.container(border=True):
+            st.caption(f"Searches inbox for messages from {_muni_email} since last update.")
+            if st.button("🔍 Check for Replies", key=f"wb_check_replies_{rid}"):
+                try:
+                    messages = check_inbox(
+                        since_timestamp=detail.get("updated_at", ""),
+                        from_email=_muni_email,
+                    )
+                    st.session_state[f"wb_replies_{rid}"] = messages
+                except Exception as e:
+                    st.error(f"Inbox check failed: {e}")
+            replies = st.session_state.get(f"wb_replies_{rid}")
+            if replies is not None:
+                if replies:
+                    st.caption(f"Found {len(replies)} message(s):")
+                    for m in replies:
+                        st.markdown(f"**{m['subject'] or '(no subject)'}** — {m['from']}")
+                        st.caption(m["date"] + (" 📎 has attachment" if m.get("has_attachments") else ""))
+                        if m.get("body"):
+                            with st.expander("Show message"):
+                                st.text(m["body"][:3000])
+                        st.divider()
+                else:
+                    st.caption("No replies found since the last send.")
 
     # Mark Received (not applicable once received, cancelled, or completed)
     if detail.get("status") not in ("received", "cancelled", "completed"):
