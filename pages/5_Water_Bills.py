@@ -269,6 +269,10 @@ elif _attn_items:
                         except Exception as _de:
                             st.error(f"Dismiss failed: {_de}")
 
+            if _itype == "unmatched" and _item.get("body_preview"):
+                with st.expander("▼ View Message", expanded=False):
+                    st.text(_item["body_preview"])
+
             if _itype == "unmatched" and st.session_state.get(f"wb_attn_link_open_{_iid}"):
                 with st.form(f"wb_attn_link_form_{_iid}"):
                     _link_sel = st.selectbox(
@@ -333,6 +337,7 @@ status_filter = [s for s, v in [
     ("cancelled",      cb_cancelled),
 ] if v]
 
+st.caption("Filtering by closing date")
 _PRESET_KEYS   = ["all", "this_week", "last_week", "this_month", "last_month", "custom"]
 _PRESET_LABELS = ["All", "This Week", "Last Week", "This Month", "Last Month", "Custom"]
 _dp = st.columns(len(_PRESET_KEYS))
@@ -361,16 +366,16 @@ elif _preset == "last_month":
     date_to   = _lm_end
 elif _preset == "custom":
     _dcc1, _dcc2 = st.columns(2)
-    date_from = _dcc1.date_input("Received from", value=None, key="wb_custom_from")
-    date_to   = _dcc2.date_input("Received to",   value=None, key="wb_custom_to")
+    date_from = _dcc1.date_input("Closing from", value=None, key="wb_custom_from")
+    date_to   = _dcc2.date_input("Closing to",   value=None, key="wb_custom_to")
 
 filters: dict = {}
 if status_filter:
     filters["status"] = status_filter
 if date_from:
-    filters["created_at_from"] = date_from.isoformat()
+    filters["closing_date_from"] = date_from.isoformat()
 if date_to:
-    filters["created_at_to"] = f"{date_to.isoformat()}T23:59:59"
+    filters["closing_date_to"] = date_to.isoformat()
 
 try:
     requests = get_requests(filters or None)
@@ -421,12 +426,7 @@ def _highlight_rows(row):
     return [""] * len(row)
 
 
-_leg_l, _leg_r = st.columns([3, 1])
-_leg_l.caption("Click a row to open the detail panel. 🔴 overdue · 🟠 due today")
-_leg_r.markdown(
-    "<p style='text-align:right;font-size:0.8em;color:#6c757d'>based on order received date</p>",
-    unsafe_allow_html=True,
-)
+st.caption("Click a row to open the detail panel. 🔴 overdue · 🟠 due today")
 selection = st.dataframe(
     df.style.apply(_highlight_rows, axis=1),
     use_container_width=True,
