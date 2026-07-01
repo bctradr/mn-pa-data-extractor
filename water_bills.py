@@ -380,8 +380,9 @@ def compose_water_bill_email(request: dict) -> tuple:
     Returns (subject: str, body: str).
     """
     muni = request.get("municipalities") or {}
-    muni_name = request.get("municipality_name") or muni.get("name") or "Municipality"
+    muni_name = request.get("municipality_name") or muni.get("name") or ""
     address = request.get("property_address") or "—"
+    address_with_muni = f"{address}, {muni_name}" if muni_name else address
     closing = request.get("closing_date") or "—"
     owners = request.get("current_owners") or "—"
     buyers = request.get("new_buyers") or "—"
@@ -411,15 +412,15 @@ def compose_water_bill_email(request: dict) -> tuple:
         contact_lines.append("Assistant: " + " | ".join(parts))
     contact_block = "\n".join(contact_lines) if contact_lines else "See reply address above."
 
-    subject = f"Water Bill Request - File# {file_num} - {address}"
+    subject = f"Water Bill Request - File# {file_num} - {address_with_muni}"
 
     body = f"""\
-Dear {muni_name} Water Department,
+Dear {muni_name or "Water Department"},
 
 We are requesting the current water/utility bill balance for the following property \
 in connection with an upcoming real estate closing:
 
-  Property Address : {address}
+  Property Address : {address_with_muni}
   Current Owners   : {owners}
   New Buyers       : {buyers}
   Closing Date     : {closing}

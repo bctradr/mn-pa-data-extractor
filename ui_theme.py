@@ -138,6 +138,7 @@ def apply_theme():
     button[kind="primary"], .stButton > button[kind="primary"] {
         background-color: #0f3a5f !important;
         border-color: #0f3a5f !important;
+        color: white !important;
     }
 
     /* ── Tabs (used heavily in PA Extractor) ──────────────── */

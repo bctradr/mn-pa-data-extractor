@@ -11,6 +11,7 @@ from datetime import date
 from water_bills import (
     get_municipalities,
     create_municipality,
+    update_municipality,
     create_request,
     get_requests,
     get_request,
@@ -76,11 +77,11 @@ if "wb_selected_id" not in st.session_state:
 # PAGE HEADER
 # ══════════════════════════════════════════════════════════════════════════════
 
-hdr_col, btn_col = st.columns([7, 1])
+hdr_col, btn_col = st.columns([5, 1.5])
 with hdr_col:
     st.title("💧 Water Bill Requests")
 with btn_col:
-    st.markdown("")
+    st.write("")
     if st.button("➕ New Request", type="primary", use_container_width=True):
         st.session_state.wb_show_form = not st.session_state.wb_show_form
         st.session_state.wb_selected_id = None
@@ -355,6 +356,14 @@ with left_col:
     muni_labels_edit  = ["— none —"] + [_muni_label(m) for m in municipalities_edit]
     muni_label_to_obj = {_muni_label(m): m for m in municipalities_edit}
 
+    # Full municipality record for Edit City Record (select("*") from get_municipalities)
+    _cur_muni_obj = None
+    if detail.get("municipality_id"):
+        for _m in municipalities_edit:
+            if _m["id"] == detail["municipality_id"]:
+                _cur_muni_obj = _m
+                break
+
     # Resolve current selection by ID (preferred) then fall back to name match.
     _cur_label = None
     if detail.get("municipality_id"):
@@ -382,6 +391,12 @@ with left_col:
 
     section_header("Request Details")
     with st.container(border=True):
+        # Municipality email status — read-only, above the form
+        if _muni_email:
+            st.caption(f"Sending to: {_muni_email}")
+        elif detail.get("municipality_id"):
+            st.warning("No email on file for this municipality. Use Edit City Record to add one.")
+
         with st.form(f"wb_edit_{rid}"):
             ef1, ef2 = st.columns(2)
             fn_edit   = ef1.text_input("File Number",      value=detail.get("file_number") or "")
@@ -397,15 +412,6 @@ with left_col:
             status_edit = st.selectbox(
                 "Status", _STATUSES, index=status_edit_idx, format_func=_status_label
             )
-
-            sc1, sc2, sc3 = st.columns(3)
-            cln_edit = sc1.text_input("Closer Name",  value=detail.get("closer_name") or "")
-            cle_edit = sc2.text_input("Closer Email", value=detail.get("closer_email") or "")
-            clp_edit = sc3.text_input("Closer Phone", value=detail.get("closer_phone") or "")
-            sa1, sa2, sa3 = st.columns(3)
-            asn_edit = sa1.text_input("Assistant Name",  value=detail.get("assistant_name") or "")
-            ase_edit = sa2.text_input("Assistant Email", value=detail.get("assistant_email") or "")
-            asp_edit = sa3.text_input("Assistant Phone", value=detail.get("assistant_phone") or "")
 
             notes_edit = st.text_area("Notes", value=detail.get("notes") or "", height=68)
             save_edit  = st.form_submit_button("💾 Save Changes", type="primary")
@@ -423,18 +429,56 @@ with left_col:
                     "municipality_name": chosen_edit.get("name") if muni_edit != "— none —" else None,
                     "request_method":    method_edit,
                     "status":            status_edit,
-                    "closer_name":       cln_edit or None,
-                    "closer_email":      cle_edit or None,
-                    "closer_phone":      clp_edit or None,
-                    "assistant_name":    asn_edit or None,
-                    "assistant_email":   ase_edit or None,
-                    "assistant_phone":   asp_edit or None,
                     "notes":             notes_edit or None,
                 })
                 st.success("Saved.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Save failed: {e}")
+
+        # Closer / assistant — read-only display (auto-populated from order intake)
+        _cl = detail.get("closer_name") or "—"
+        _as = detail.get("assistant_name") or "—"
+        st.caption(f"Closer: {_cl}  ·  Assistant: {_as}")
+
+    # Edit City Record — inline expander beneath Request Details
+    with st.expander("✏️ Edit City Record", expanded=False):
+        if not _cur_muni_obj:
+            st.caption("Select a municipality on this request first.")
+        else:
+            _pref_methods = ["email", "fax", "phone", "portal"]
+            _pref_idx = _pref_methods.index(_cur_muni_obj.get("preferred_method") or "email") \
+                if (_cur_muni_obj.get("preferred_method") or "email") in _pref_methods else 0
+            with st.form(f"wb_muni_edit_{rid}"):
+                mc1, mc2 = st.columns([3, 1])
+                muni_name_edit  = mc1.text_input("Name",  value=_cur_muni_obj.get("name") or "")
+                muni_state_edit = mc2.selectbox("State", ["MN", "WI"],
+                    index=0 if (_cur_muni_obj.get("state") or "MN") == "MN" else 1)
+                muni_pref_edit  = st.selectbox("Preferred Method", _pref_methods, index=_pref_idx)
+                me1, me2 = st.columns(2)
+                muni_email_edit = me1.text_input("Email", value=_cur_muni_obj.get("email") or "")
+                muni_fax_edit   = me2.text_input("Fax",   value=_cur_muni_obj.get("fax") or "")
+                muni_portal_edit = st.text_input("Portal URL", value=_cur_muni_obj.get("portal_url") or "")
+                muni_lead_edit  = st.number_input("Lead Time (days)", min_value=0, max_value=90,
+                    value=int(_cur_muni_obj.get("lead_time_days") or 7))
+                muni_notes_edit = st.text_area("Notes", value=_cur_muni_obj.get("notes") or "", height=68)
+                muni_save = st.form_submit_button("💾 Save City Record", type="primary")
+            if muni_save:
+                try:
+                    update_municipality(_cur_muni_obj["id"], {
+                        "name":             muni_name_edit or None,
+                        "state":            muni_state_edit,
+                        "preferred_method": muni_pref_edit,
+                        "email":            muni_email_edit or None,
+                        "fax":              muni_fax_edit or None,
+                        "portal_url":       muni_portal_edit or None,
+                        "lead_time_days":   muni_lead_edit,
+                        "notes":            muni_notes_edit or None,
+                    })
+                    st.success("City record saved.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Save failed: {e}")
 
 
 # ── Right: followup log, log action, mark received, download ─────────────────
