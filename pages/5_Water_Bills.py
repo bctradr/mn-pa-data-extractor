@@ -6,7 +6,7 @@ Water Bill Requests — create and track water bill requests to municipalities.
 
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
 
 from water_bills import (
     get_municipalities,
@@ -24,6 +24,9 @@ from water_bills import (
     complete_request,
     compose_water_bill_email,
     process_inbox_replies,
+    get_unmatched_messages,
+    update_unmatched_message,
+    get_bounced_requests,
 )
 from gmail_client import send_email, check_inbox
 from ui_theme import apply_theme, section_header, section_bar
@@ -71,6 +74,8 @@ if "wb_show_form" not in st.session_state:
     st.session_state.wb_show_form = False
 if "wb_selected_id" not in st.session_state:
     st.session_state.wb_selected_id = None
+if "wb_date_preset" not in st.session_state:
+    st.session_state.wb_date_preset = "all"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -192,25 +197,172 @@ if st.session_state.wb_show_form:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# NEEDS ATTENTION BANNER
+# ══════════════════════════════════════════════════════════════════════════════
+
+_attn_items: list = []
+_attn_error: str | None = None
+try:
+    _unmatched_msgs = get_unmatched_messages(status="new")
+    _bounced_reqs   = get_bounced_requests()
+    _attn_items = (
+        [{"_type": "unmatched", **m} for m in _unmatched_msgs]
+        + [{"_type": "bounced", **r}  for r in _bounced_reqs]
+    )
+except Exception as _attn_exc:
+    _err_str = str(_attn_exc).lower()
+    if "water_bill_unmatched_messages" in _err_str or "does not exist" in _err_str or "column" in _err_str:
+        _attn_error = "migration"
+    else:
+        _attn_error = str(_attn_exc)
+
+if _attn_error == "migration":
+    st.info("Run migration 006 to enable the Needs Attention panel.")
+elif _attn_error:
+    st.warning(f"Needs Attention panel unavailable: {_attn_error}")
+elif _attn_items:
+    with st.expander(f"⚠️ {len(_attn_items)} item(s) need attention", expanded=True):
+        try:
+            _open_reqs = get_requests({"status": ["pending", "sent", "follow_up_sent"]})
+        except Exception:
+            _open_reqs = []
+        _req_opts = {
+            f"{r.get('file_number') or '—'}  —  {r.get('property_address') or '—'}": r["id"]
+            for r in _open_reqs
+        }
+
+        for _item in _attn_items:
+            _itype = _item["_type"]
+            _iid   = _item.get("id")
+
+            if _itype == "unmatched":
+                _i_from  = _item.get("from_address") or "—"
+                _i_subj  = _item.get("subject") or "(no subject)"
+                _i_date  = (_item.get("checked_at") or "")[:10]
+                _i_label = f"**Unmatched Message** · {_i_from} · _{_i_subj}_"
+            else:
+                _i_from  = _item.get("file_number") or "—"
+                _i_subj  = _item.get("property_address") or "—"
+                _i_date  = "—"
+                _i_label = f"**Bounced Request** · File# {_i_from} · {_i_subj}"
+
+            _ac1, _ac2, _ac3, _ac4 = st.columns([5, 1, 1.5, 1.5])
+            _ac1.markdown(_i_label)
+            _ac2.caption(_i_date)
+
+            with _ac3:
+                if _itype == "unmatched":
+                    if st.button("🔗 Link", key=f"wb_attn_link_{_iid}"):
+                        st.session_state[f"wb_attn_link_open_{_iid}"] = True
+                else:
+                    if st.button("View", key=f"wb_attn_view_{_iid}"):
+                        st.session_state.wb_selected_id = _iid
+                        st.rerun()
+
+            with _ac4:
+                if _itype == "unmatched":
+                    if st.button("✕ Dismiss", key=f"wb_attn_dismiss_{_iid}"):
+                        try:
+                            update_unmatched_message(_iid, {"status": "dismissed"})
+                            st.session_state.pop(f"wb_attn_link_open_{_iid}", None)
+                            st.rerun()
+                        except Exception as _de:
+                            st.error(f"Dismiss failed: {_de}")
+
+            if _itype == "unmatched" and st.session_state.get(f"wb_attn_link_open_{_iid}"):
+                with st.form(f"wb_attn_link_form_{_iid}"):
+                    _link_sel = st.selectbox(
+                        "Link to request",
+                        options=["— select —"] + list(_req_opts.keys()),
+                    )
+                    _lc1, _lc2 = st.columns(2)
+                    _link_ok     = _lc1.form_submit_button("✅ Confirm", type="primary")
+                    _link_cancel = _lc2.form_submit_button("Cancel")
+                if _link_ok:
+                    if _link_sel == "— select —":
+                        st.error("Select a request first.")
+                    else:
+                        try:
+                            _linked_rid = _req_opts[_link_sel]
+                            update_unmatched_message(_iid, {
+                                "status": "reviewed",
+                                "linked_request_id": _linked_rid,
+                            })
+                            log_followup(
+                                request_id=_linked_rid,
+                                action="note",
+                                method="email",
+                                notes=f"Manually linked from unmatched inbox message — {_i_subj}",
+                                logged_by="system",
+                            )
+                            st.session_state.pop(f"wb_attn_link_open_{_iid}", None)
+                            st.rerun()
+                        except Exception as _le:
+                            st.error(f"Link failed: {_le}")
+                if _link_cancel:
+                    st.session_state.pop(f"wb_attn_link_open_{_iid}", None)
+                    st.rerun()
+
+            st.divider()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FILTERS + TABLE
 # ══════════════════════════════════════════════════════════════════════════════
 
+today = date.today()
 section_bar("All Requests")
-fc1, fc2, fc3, fc4 = st.columns([3, 1.5, 1.5, 1])
-status_filter = fc1.multiselect(
-    "Status",
-    options=_STATUSES,
-    format_func=_status_label,
-    default=["pending", "sent", "follow_up_sent"],
-    label_visibility="collapsed",
-    placeholder="Filter by status…",
-)
-date_from = fc2.date_input("Closing from", value=None, label_visibility="collapsed")
-date_to   = fc3.date_input("Closing to",   value=None, label_visibility="collapsed")
-with fc4:
-    st.markdown("")
-    if st.button("🔄 Refresh", use_container_width=True):
+_sc = st.columns([1, 1, 1.4, 1, 1.2, 1.2, 0.5])
+cb_pending   = _sc[0].checkbox("⚪ Pending",        value=True,  key="wb_cb_pending")
+cb_sent      = _sc[1].checkbox("🔵 Sent",            value=True,  key="wb_cb_sent")
+cb_followup  = _sc[2].checkbox("🟠 Follow-up Sent",  value=True,  key="wb_cb_followup")
+cb_received  = _sc[3].checkbox("🟢 Received",        value=False, key="wb_cb_received")
+cb_completed = _sc[4].checkbox("✅ Completed",       value=False, key="wb_cb_completed")
+cb_cancelled = _sc[5].checkbox("🔴 Cancelled",       value=False, key="wb_cb_cancelled")
+with _sc[6]:
+    st.markdown("<div style='padding-top:6px'></div>", unsafe_allow_html=True)
+    if st.button("🔄", use_container_width=True, help="Refresh"):
         st.rerun()
+
+status_filter = [s for s, v in [
+    ("pending",        cb_pending),
+    ("sent",           cb_sent),
+    ("follow_up_sent", cb_followup),
+    ("received",       cb_received),
+    ("completed",      cb_completed),
+    ("cancelled",      cb_cancelled),
+] if v]
+
+_PRESET_KEYS   = ["all", "this_week", "last_week", "this_month", "last_month", "custom"]
+_PRESET_LABELS = ["All", "This Week", "Last Week", "This Month", "Last Month", "Custom"]
+_dp = st.columns(len(_PRESET_KEYS))
+for _i, (_pk, _pl) in enumerate(zip(_PRESET_KEYS, _PRESET_LABELS)):
+    _active = st.session_state.wb_date_preset == _pk
+    if _dp[_i].button(_pl, key=f"wb_dp_{_pk}", type="primary" if _active else "secondary",
+                      use_container_width=True):
+        st.session_state.wb_date_preset = None if _active else _pk
+        st.rerun()
+
+date_from = date_to = None
+_preset = st.session_state.wb_date_preset
+if _preset == "this_week":
+    date_from = today - timedelta(days=today.weekday())
+    date_to   = date_from + timedelta(days=6)
+elif _preset == "last_week":
+    date_from = today - timedelta(days=today.weekday() + 7)
+    date_to   = date_from + timedelta(days=6)
+elif _preset == "this_month":
+    date_from = today.replace(day=1)
+    date_to   = (today.replace(month=today.month + 1, day=1) - timedelta(days=1)) \
+                if today.month < 12 else today.replace(month=12, day=31)
+elif _preset == "last_month":
+    _lm_end = today.replace(day=1) - timedelta(days=1)
+    date_from = _lm_end.replace(day=1)
+    date_to   = _lm_end
+elif _preset == "custom":
+    _dcc1, _dcc2 = st.columns(2)
+    date_from = _dcc1.date_input("Closing from", value=None, key="wb_custom_from")
+    date_to   = _dcc2.date_input("Closing to",   value=None, key="wb_custom_to")
 
 filters: dict = {}
 if status_filter:
@@ -230,7 +382,6 @@ if not requests:
     st.info("No requests match the current filters.")
     st.stop()
 
-today = date.today()
 rows = []
 raw_send_by = []  # parallel lists for row styling; not shown directly
 raw_status = []

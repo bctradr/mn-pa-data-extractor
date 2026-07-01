@@ -565,3 +565,57 @@ def process_inbox_replies(messages: list) -> dict:
             unmatched.append(msg)
 
     return {"matched": matched, "unmatched": unmatched}
+
+
+def get_unmatched_messages(status: str = "new") -> list:
+    """Return unmatched inbox messages with the given status."""
+    sb = get_supabase()
+    result = (
+        sb.table("water_bill_unmatched_messages")
+        .select("*")
+        .eq("status", status)
+        .order("checked_at", desc=True)
+        .execute()
+    )
+    return result.data or []
+
+
+def update_unmatched_message(msg_id: str, data: dict) -> dict:
+    """Update fields on an unmatched message row."""
+    sb = get_supabase()
+    result = (
+        sb.table("water_bill_unmatched_messages")
+        .update(data)
+        .eq("id", msg_id)
+        .execute()
+    )
+    return (result.data or [{}])[0]
+
+
+def get_bounced_requests() -> list:
+    """Return active requests whose most recent auto-processed followup was classified as a bounce."""
+    sb = get_supabase()
+    followup_result = (
+        sb.table("water_bill_followups")
+        .select("request_id, logged_at")
+        .ilike("notes", "Inbound reply%bounce%")
+        .order("logged_at", desc=True)
+        .execute()
+    )
+    seen_ids: list[str] = []
+    seen_set: set[str] = set()
+    for row in (followup_result.data or []):
+        rid = row["request_id"]
+        if rid not in seen_set:
+            seen_set.add(rid)
+            seen_ids.append(rid)
+    if not seen_ids:
+        return []
+    req_result = (
+        sb.table("water_bill_requests")
+        .select("id, file_number, property_address, status, municipality_name")
+        .in_("id", seen_ids)
+        .in_("status", ["sent", "follow_up_sent"])
+        .execute()
+    )
+    return req_result.data or []
