@@ -200,9 +200,9 @@ def get_requests(filters: dict = None) -> list:
     """Fetch requests with optional filters, joined to municipalities.
 
     Supported filter keys:
-        status (list[str])      — include only these status values
-        closing_date_from (str) — ISO date string, inclusive lower bound
-        closing_date_to (str)   — ISO date string, inclusive upper bound
+        status (list[str])       — include only these status values
+        created_at_from (str)    — ISO date string, inclusive lower bound on created_at
+        created_at_to (str)      — ISO date string, inclusive upper bound on created_at
     """
     sb = get_supabase()
     q = (
@@ -213,10 +213,10 @@ def get_requests(filters: dict = None) -> list:
     if filters:
         if filters.get("status"):
             q = q.in_("status", filters["status"])
-        if filters.get("closing_date_from"):
-            q = q.gte("closing_date", filters["closing_date_from"])
-        if filters.get("closing_date_to"):
-            q = q.lte("closing_date", filters["closing_date_to"])
+        if filters.get("created_at_from"):
+            q = q.gte("created_at", filters["created_at_from"])
+        if filters.get("created_at_to"):
+            q = q.lte("created_at", filters["created_at_to"])
 
     result = q.execute()
     return result.data or []

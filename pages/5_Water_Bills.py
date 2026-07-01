@@ -361,16 +361,16 @@ elif _preset == "last_month":
     date_to   = _lm_end
 elif _preset == "custom":
     _dcc1, _dcc2 = st.columns(2)
-    date_from = _dcc1.date_input("Closing from", value=None, key="wb_custom_from")
-    date_to   = _dcc2.date_input("Closing to",   value=None, key="wb_custom_to")
+    date_from = _dcc1.date_input("Received from", value=None, key="wb_custom_from")
+    date_to   = _dcc2.date_input("Received to",   value=None, key="wb_custom_to")
 
 filters: dict = {}
 if status_filter:
     filters["status"] = status_filter
 if date_from:
-    filters["closing_date_from"] = date_from.isoformat()
+    filters["created_at_from"] = date_from.isoformat()
 if date_to:
-    filters["closing_date_to"] = date_to.isoformat()
+    filters["created_at_to"] = f"{date_to.isoformat()}T23:59:59"
 
 try:
     requests = get_requests(filters or None)
@@ -421,7 +421,12 @@ def _highlight_rows(row):
     return [""] * len(row)
 
 
-st.caption("Click a row to open the detail panel. 🔴 overdue · 🟠 due today")
+_leg_l, _leg_r = st.columns([3, 1])
+_leg_l.caption("Click a row to open the detail panel. 🔴 overdue · 🟠 due today")
+_leg_r.markdown(
+    "<p style='text-align:right;font-size:0.8em;color:#6c757d'>based on order received date</p>",
+    unsafe_allow_html=True,
+)
 selection = st.dataframe(
     df.style.apply(_highlight_rows, axis=1),
     use_container_width=True,
