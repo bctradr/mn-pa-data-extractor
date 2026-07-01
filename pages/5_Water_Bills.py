@@ -200,8 +200,8 @@ if st.session_state.wb_show_form:
 # NEEDS ATTENTION BANNER
 # ══════════════════════════════════════════════════════════════════════════════
 
-_attn_items: list = []
-_attn_error: str | None = None
+_attn_items = []
+_attn_error = None
 try:
     _unmatched_msgs = get_unmatched_messages(status="new")
     _bounced_reqs   = get_bounced_requests()
