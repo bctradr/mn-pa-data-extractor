@@ -77,11 +77,9 @@ if "wb_selected_id" not in st.session_state:
 # PAGE HEADER
 # ══════════════════════════════════════════════════════════════════════════════
 
-hdr_col, btn_col = st.columns([5, 1.5])
-with hdr_col:
-    st.title("💧 Water Bill Requests")
+st.title("💧 Water Bill Requests")
+_, btn_col = st.columns([5, 1.5])
 with btn_col:
-    st.write("")
     if st.button("➕ New Request", type="primary", use_container_width=True):
         st.session_state.wb_show_form = not st.session_state.wb_show_form
         st.session_state.wb_selected_id = None
