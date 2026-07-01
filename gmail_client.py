@@ -143,15 +143,24 @@ def check_inbox(since_timestamp: str) -> list:
 
 
 def _extract_body(payload: dict) -> str:
-    if payload.get("mimeType") == "text/plain":
-        data = (payload.get("body") or {}).get("data", "")
-        if data:
-            return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
-    for part in _iter_parts(payload):
+    """Return full plain-text body. Falls back to tag-stripped HTML if no text/plain part exists."""
+    # Prefer text/plain — includes full quoted history as delivered by the API.
+    candidates = [payload] + list(_iter_parts(payload))
+    for part in candidates:
         if part.get("mimeType") == "text/plain":
             data = (part.get("body") or {}).get("data", "")
             if data:
                 return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+
+    # Fallback: HTML-only email — strip tags so matching still works.
+    import re as _re
+    for part in candidates:
+        if part.get("mimeType") == "text/html":
+            data = (part.get("body") or {}).get("data", "")
+            if data:
+                html = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+                return _re.sub(r"<[^>]+>", " ", html)
+
     return ""
 
 

@@ -484,11 +484,6 @@ with right_col:
         st.markdown("")
         section_header("Send Now")
         with st.container(border=True):
-            # DEBUG — remove after confirming
-            st.write("DEBUG request_method:", repr(detail.get("request_method")))
-            st.write("DEBUG _is_email:", _is_email)
-            st.write("DEBUG _muni_email:", repr(_muni_email))
-            st.write("DEBUG wb_show_send set:", st.session_state.get(f"wb_show_send_{rid}", False))
             if _is_email:
                 # Email path — always show Send Review popup; To field editable with muni email pre-filled
                 if st.button("📤 Send Email Now", key=f"wb_send_btn_{rid}", type="primary"):
